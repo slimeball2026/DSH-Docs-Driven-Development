@@ -1,0 +1,46 @@
+{
+  "name": "@local/ddd",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Document-Driven Development (DDD) construction constraint engine for DeepSeek-Harness — project-scoped read gate + index injection, mounted globally at profile level.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "config.js",
+    "docs/*.js",
+    "core/*.js",
+    "adapters/*.js",
+    "tools/*.js",
+    "server/*.ts",
+    "lib/client.js",
+    "src/client/*.ts",
+    "src/client/*.tsx",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "node --test --test-isolation=none",
+    "typecheck": "tsc --noEmit"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  },
+  "devDependencies": {
+    "tsdown": "0.23.7",
+    "typescript": "7.0.2"
+  }
+}
