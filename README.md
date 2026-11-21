@@ -3,7 +3,7 @@
 > **让 AI 在动手改项目文档之前，必须先读过该读的文档。**
 > 「读没读」由插件**记账并强制**，不是靠提示词嘱咐。
 
-**版本**：v1.0.0 ｜ **平台**：DeepSeek-Harness（桌面端 / Web 端）｜ **许可证**：MIT
+**版本**：v1.1.0 ｜ **平台**：DeepSeek-Harness（桌面端 / Web 端）｜ **许可证**：MIT
 
 ---
 
@@ -85,7 +85,8 @@ AI 会自己去读入口索引、建文档、维护阅读顺序。你不需要�
 | 定稿 / 作废 | 「把它标成权威 / 作废」 | `doc_mark`（只改 frontmatter 状态） |
 | 归档 | 「把这个归档」 | `doc_mark` 标 `void`，**然后由你在界面「归档」页签点**才真正搬文件 |
 | 交付 | 「交付这个」 | 复制文件到 `deliverables/`（没有"交付工具"，就是复制） |
-| 交接给下一个会话 | 「进行交接流程」 | 写七段交接文档 + 更新阅读顺序 |
+| 改阅读顺序 | 「把这份文档提前读」 | `edit` 改 frontmatter 的 `order`；入口索引的「必读清单」成员**由插件自动同步**（M3） |
+| 交接给下一个会话 | 「进行交接流程」 | 写七段交接文档 + 写索引的「为什么读 / 下一步 / 陷阱 / 依据」 |
 
 ### 界面上有什么
 
@@ -105,6 +106,7 @@ AI 会自己去读入口索引、建文档、维护阅读顺序。你不需要�
 ② docs/scan.js + registry   扫描 docs/，建注册表（内存缓存）
 ③ adapters/inject.js     每轮往系统提示词里注入一个「索引块」
 ④ adapters/guard.js → ctx.tools.guard()   真正拦 write/edit 的 if
+⑤ core/requiredList.js   按 frontmatter 自动重渲染入口索引的「必读清单」（M3）
 ```
 
 「读没读」记在 `readSet`（**会话级、内存里的 WeakMap**），不落盘。
@@ -144,7 +146,7 @@ AI 会自己去读入口索引、建文档、维护阅读顺序。你不需要�
 │   ├── index.js              ← 插件入口：注入 + 门禁 + 记账 + 坟场过滤
 │   ├── config.js             ← 配置解析
 │   ├── cordis.patch.yml      ← bundle 声明
-│   ├── package.json          ← v1.0.0
+│   ├── package.json          ← v1.1.0
 │   ├── core/                 ← 纯函数层（零 IO）
 │   │   ├── gate.js           ← ★ decideGate()：门禁的唯一判决点
 │   │   ├── roles.js          ← 按 role 的写权限表
@@ -155,6 +157,7 @@ AI 会自己去读入口索引、建文档、维护阅读顺序。你不需要�
 │   │   ├── render.js         ← 索引块渲染
 │   │   ├── budget.js         ← 冷启动 token 预算
 │   │   ├── registerHandover.js ← 交接自动登记进索引
+│   │   ├── requiredList.js   ← ★ 必读清单自动块（M3：按 frontmatter 渲染）
 │   │   ├── anchors.js        ← verifiedAgainst 锚点漂移
 │   │   ├── scope.js          ← 激活范围判定
 │   │   ├── agentsMd.js       ← AGENTS.md 索引块
@@ -180,7 +183,7 @@ AI 会自己去读入口索引、建文档、维护阅读顺序。你不需要�
 │   ├── server/               ← 宿主侧路由（快照、归档、交付、初始化）
 │   ├── src/client/           ← 界面（React，构建到 lib/client.js）
 │   ├── lib/client.js         ← 构建产物（界面实际加载这个）
-│   └── test/                 ← 单测（1231 条）
+│   └── test/                 ← 单测（1249 条）
 ├── skill/
 │   └── ddd-workflow/
 │       └── SKILL.md          ← ★ 给 AI 的工作手册（必装）
@@ -196,7 +199,7 @@ AI 会自己去读入口索引、建文档、维护阅读顺序。你不需要�
 ```powershell
 cd plugin
 
-# 单测（1231 条）
+# 单测（1249 条）
 node --test --test-isolation=none
 
 # 构建界面（改了 src/client/ 之后**必须**跑，否则界面还是旧的）
