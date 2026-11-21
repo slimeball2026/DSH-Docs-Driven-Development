@@ -22,6 +22,7 @@ import { handoverMinOrder } from '../core/handover.js'
 import { setFrontmatterFields } from '../core/frontmatterEdit.js'
 // M2.8：新交接自动登记进入口索引的必读清单（拆「交接 ↔ read-order」循环依赖）。
 import { registerHandoverInIndexFile } from '../core/registerHandover.js'
+import { writeRequiredListFile } from '../core/requiredList.js'
 
 const DESCRIPTION = [
   '在 docs/ 下新建一份带合法 frontmatter 的文档。只给 role/title/summary 就能建。',
@@ -482,6 +483,13 @@ export function createNewTool(deps) {
           // 那一轮交接回合从 8 657 字符打到 25 038）。
           indexCountBefore: { type: 'number', required: true },
           indexCountAfter: { type: 'number', required: true },
+          // ---- M3：必读清单半自动渲染的结果 ----
+          //
+          // ⚠️ 同样必须在 schema 里声明（`additionalProperties: false`，
+          //    多一个键就是"整个 doc_new 调用被拒"，M2.6 血泪）。
+          requiredListApplied: { type: 'boolean', required: true },
+          requiredListChanged: { type: 'boolean', required: true },
+          requiredListWarning: { type: 'string', required: true },
         },
       },
       render: (_args, value) => [{
@@ -535,7 +543,24 @@ export function createNewTool(deps) {
           //
           // ⇒ 工具既然改了别人的文件，就有义务说清**改成了什么**。
           //   带上条数变化，模型才知道要回去改哪一句。
-          + (value.role === 'handover'
+          // ---- M3：必读清单半自动渲染的回执（用户 2026-11-20 拍板）----
+          //
+          // 与 M2.8 的"自动登记一行"是两种世界：
+          //   · **自动块**：成员与顺序由 frontmatter 渲染，改它不该再让模型付出任何步骤；
+          //   · **手写清单**（旧项目）：保留原来的整套提醒（那是唯一真源，插件不替它判成员）。
+          + (value.requiredListWarning !== ''
+            ? `\n⚠️ ${value.requiredListWarning}`
+              + '\n   这通常意味着有人手改过自动块；**本轮没有覆盖它**（其它写入都已成功）。'
+            : '')
+          + (value.requiredListApplied
+            ? '\n✅ **入口索引的「必读清单」已由插件按 frontmatter 自动维护**（这一节不用你再改）。'
+              + (value.indexCountBefore !== value.indexCountAfter
+                ? `\n⚠️ **必读清单条数变了**：${value.indexCountBefore} → ${value.indexCountAfter}。`
+                  + '如果你在交接或索引里写过"必读清单 N 条"这类**计数**，现在就是过期的。'
+                : '')
+              + '\n   你仍要手写更新的是索引的**其它小节**（下一步 / 陷阱 / 依据文档）。'
+            : '')
+          + (value.role === 'handover' && value.requiredListApplied !== true
             ? (value.indexRegistered
               ? '\n✅ **入口索引的必读清单已自动登记本份交接**（不用你再改 `read-order` 加自己）。'
                 + '所以交接里写「索引已登记」这一刻是真的。'
@@ -1184,6 +1209,35 @@ export function createNewTool(deps) {
         }))
       }
 
+      // ---- ④.1 被取代的旧交接：插件改了它的 frontmatter → 记成"本会话自己写过"（M3 / O1）----
+      //
+      // ---- 缺陷现场（前端实机 fe2 `session-524a69ad` seq198，2026-11-20）----
+      //
+      // ```
+      // seq 185  doc_new(handover)   → 旧交接被自动标成 superseded（指纹变了）
+      // seq 198  doc_mark(旧交接)     ❌ Error: 你读过的是旧版（v36521b），磁盘已是 v2d8350
+      // ```
+      //
+      // 而 seq 185 → 198 之间**没有任何外部改动** —— 改它的是插件自己。
+      // 模型只会读到"你读过的是旧版"，然后**整份重读一份它已经读过的文档**（1 次白读 + 1 次失败）。
+      //
+      // ---- 为什么用 `noteSelfWrite` 而不是 `markRead` ----
+      //
+      // `markRead` 会把"没读过"也变成"读过" —— 那等于给模型凭空发放写权限。
+      // `isSelfWritten` 只豁免**指纹比对**、不豁免「必须先读」（见 `core/gate.js`）：
+      // 模型真读过的旧交接 → 放行；没读过的 → 仍然会被要求读。两条都正确。
+      for (const oldId of supersededOld) {
+        try {
+          const oldEntry = typeof reg?.entryById === 'function' ? reg.entryById(oldId) : undefined
+          if (typeof oldEntry?.path === 'string' && oldEntry.path !== ''
+            && typeof reg?.noteSelfWrite === 'function') {
+            reg.noteSelfWrite(oldEntry.path, session)
+          }
+        } catch (error) {
+          logger?.debug?.(`[ddd] 旧交接重新记账失败（只影响下一次 doc_mark 是否要重读）：${error?.message ?? error}`)
+        }
+      }
+
       // ---- ④.5 **supersede 之后必须重新记账**（2026-11-15 M2.8，第 30 轮 `session-84b1e3ea`）----
       //
       // ---- 缺陷现场 ----
@@ -1224,30 +1278,47 @@ export function createNewTool(deps) {
         }
       }
 
-      // ---- ⑤ 新交接自动登记进入口索引的必读清单（M2.8，用户拍板）----
+      // ---- ⑤ 入口索引的「必读清单」：M3 半自动渲染（用户 2026-11-20 拍板）----
       //
-      // 拆掉「交接 ↔ read-order」的循环依赖，详见 `core/registerHandover.js` 的文件头。
-      // 一句话：两条要求（清单里要有交接 / 交接里的话必须此刻为真）在时间上无法同时满足，
-      // 而模型只有三种写法、全都有代价。第 24 轮为此烧掉 10 879 字符的纯推演。
+      // 写入时机：**doc_new 之后自动**（不让模型多付出一步）；
+      // 冲突策略：**warn**（自动块被人手改过 → 不覆盖、只在回执里说清）。
+      // 详见 `core/requiredList.js` 的文件头。
       //
-      // 为什么放在 `supersedeOldHandovers` **之后**：old 交接被标 superseded 后
-      // `role: index` 的那个条目不受影响，但顺序上"先收拾旧的、再登记新的"更符合直觉，
-      // 且两条都失败时报告顺序稳定（便于测试断言）。
+      // ⚠️ 顺序：必须在 rescan（③）与 supersede（④ / ④.5）**之后** ——
+      //    渲染要读注册表里最新的条目与状态。
       //
-      // ⚠️ **必须在 rescan 之后**（③ 之后）：要靠注册表拿到 `read-order` 的真实路径与正文。
-      const indexRegistration = role === 'handover'
-        ? await registerHandoverInIndexFile({
-          reg,
-          fs,
-          session,
-          exec,
-          selfId: id,
-          order,
-          summary: typeof args?.summary === 'string' ? args.summary : '',
-          projectRoot: root,
-          logger,
-        })
-        : { changed: false, reason: '不是交接文档' }
+      // 旧逻辑 `registerHandoverInIndexFile`（M2.8 的"交接自动插一行"）**保留为兜底**：
+      // 只用于「read-order 还没有自动块」的旧项目（手写清单）—— 那些项目里
+      // 手写清单仍是唯一真源，插件不该替它判成员，但至少能把新交接登记进去。
+      const requiredList = await writeRequiredListFile({
+        reg,
+        fs,
+        session,
+        exec,
+        projectRoot: root,
+        policy: sandboxPolicyOf(exec),
+        logger,
+      })
+      const indexRegistration = requiredList.applied === true
+        ? {
+          changed: requiredList.changed === true,
+          reason: 'auto-block',
+          countBefore: requiredList.countBefore,
+          countAfter: requiredList.countAfter,
+        }
+        : (role === 'handover'
+          ? await registerHandoverInIndexFile({
+            reg,
+            fs,
+            session,
+            exec,
+            selfId: id,
+            order,
+            summary: typeof args?.summary === 'string' ? args.summary : '',
+            projectRoot: root,
+            logger,
+          })
+          : { changed: false, reason: '不是交接文档' })
 
       return {
         id,
@@ -1266,6 +1337,10 @@ export function createNewTool(deps) {
         // 拿不到就当 0/0（渲染那边会判"没变化"，不输出那一段）。
         indexCountBefore: typeof indexRegistration.countBefore === 'number' ? indexRegistration.countBefore : 0,
         indexCountAfter: typeof indexRegistration.countAfter === 'number' ? indexRegistration.countAfter : 0,
+        // M3：必读清单半自动渲染（是否接管 / 是否改了 / 有没有冲突）。
+        requiredListApplied: requiredList.applied === true,
+        requiredListChanged: requiredList.changed === true,
+        requiredListWarning: typeof requiredList.warning === 'string' ? requiredList.warning : '',
         // L34（选项 c）：**只报告，不改行为**。空串 = 没问题。
         orderWarning: handoverOrderWarningOf({
           order,

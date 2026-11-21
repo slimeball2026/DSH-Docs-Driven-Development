@@ -36,6 +36,7 @@
 import { defineTool } from './define-tool.js'
 import { sandboxPolicyOf } from './doc-new.js'
 import { setFrontmatterFields } from '../core/frontmatterEdit.js'
+import { writeRequiredListFile } from '../core/requiredList.js'
 import { STATUSES, BASES } from '../docs/schema.js'
 
 const DESCRIPTION = [
@@ -218,6 +219,10 @@ export function createMarkTool(deps) {
           // ⚠️ 声明是**必须**的 —— `additionalProperties: false`，
           //    返回值里多一个没声明的键会让**整个 doc_mark 调用被拒**（M2.6 的血泪）。
           basisPending: { type: 'boolean', required: true },
+          // ---- M3：必读清单半自动渲染（同样必须声明，否则整个调用被拒）----
+          requiredListApplied: { type: 'boolean', required: true },
+          requiredListChanged: { type: 'boolean', required: true },
+          requiredListWarning: { type: 'string', required: true },
         },
       },
       render: (_args, value) => {
@@ -232,7 +237,13 @@ export function createMarkTool(deps) {
                 + '\n   现在就要改的话，用 `edit` 改 frontmatter 的 `basis:` 一行（`实测` / `推断` 由你判断）。'
                 + '\n   ⚠️ 别在标绿**之后**才改：那样指纹会变、又得重读一遍。'
               : '')
-            + (value.indexed ? '\n索引已刷新。' : '\n⚠️ 重扫失败，索引可能还没更新。'),
+            + (value.indexed ? '\n索引已刷新。' : '\n⚠️ 重扫失败，索引可能还没更新。')
+            + (value.requiredListWarning !== ''
+              ? `\n⚠️ ${value.requiredListWarning}`
+              : '')
+            + (value.requiredListChanged
+              ? '\n✅ 入口索引的「必读清单」已按 frontmatter 自动重渲染（这一节不用你再改）。'
+              : ''),
         }]
       },
     },
@@ -551,6 +562,29 @@ export function createMarkTool(deps) {
         }
       }
 
+      // ---- 7.7 必读清单半自动渲染（M3，用户 2026-11-20 拍板）----
+      //
+      // `doc_mark` 改的是 status，而 read-order 的必读清单**就是 status 的投影**
+      //（authoritative/partial 才进清单）—— 所以标完之后必须重渲染一次，
+      // 否则清单会一直停留在"标绿之前"的成员上（fe2 实机里那条新交接就是这样漏的）。
+      //
+      // 必须放在 7.5 **之后**：渲染会改 read-order，写完要由渲染器自己重新记账，
+      // 而它刷新的是「本会话读过 read-order」那条记录。
+      //
+      // ⚠️ 必须在标绿快照（第 8 步）**之前**：快照记的是"标绿这一刻其它文档的指纹"。
+      //    如果先拍快照再改 read-order，H-6 会在下一次 `doc_health` 里报"标绿后它变过"——
+      //    而那是插件自己的常规机械改动，不该制造告警。
+      const requiredListRoot = deps.projectRootOf ? deps.projectRootOf(session) : undefined
+      const requiredList = await writeRequiredListFile({
+        reg,
+        fs,
+        session,
+        exec,
+        projectRoot: requiredListRoot,
+        policy: sandboxPolicyOf(exec),
+        logger: deps.logger,
+      })
+
       // ---- 7.6 标绿时 `basis` 还是「未验证」→ **当场说**（第 27 轮反馈 P1）----
       //
       // 缺陷现场：`doc_new` 建出来 `basis: 未验证`；标 `authoritative` 时
@@ -672,6 +706,10 @@ export function createMarkTool(deps) {
         // M2.8 第 27 轮：标绿时 `basis` 还是「未验证」→ 提醒一句（不改行为）。
         // ⚠️ 必须在 schema 里声明（`additionalProperties: false`，见下面那段血泪）。
         basisPending,
+        // M3：必读清单半自动渲染（是否接管 / 是否改了 / 有没有冲突）。
+        requiredListApplied: requiredList.applied === true,
+        requiredListChanged: requiredList.changed === true,
+        requiredListWarning: typeof requiredList.warning === 'string' ? requiredList.warning : '',
         // ⚠️ **不要往返回值里加 `snapshotRefs`** —— 2026-11-14 M2.6 血泪：
         //
         // 我第一版加了这个字段，宿主立刻拒绝：

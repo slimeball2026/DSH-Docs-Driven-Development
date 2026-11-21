@@ -76,10 +76,15 @@ test('生成的入口索引含 id / role / status / summary（缺一个就不算
   assert.match(text, /^basis: .+$/m)
 })
 
-test('生成的正文带项目名，且不含"编造"的必读项', () => {
+test('生成的正文带项目名，且不含"编造"的必读项；必读清单是**自动块**（M3）', () => {
   const text = initialIndexDoc({ projectName: 'my-proj' })
   assert.match(text, /my-proj/, '正文应当提到项目名，方便用户确认写对了地方')
-  assert.match(text, /还没有必读文档/, '空清单要明说，不要编一份假清单')
+  // M3：成员与顺序由插件按 frontmatter 渲染，模板只留一个空标记块 + 人手写的「为什么读」。
+  // 空块 = "还没渲染过"，第一次 doc_new/doc_mark 之后会被填上真实成员。
+  assert.match(text, /<!-- ddd:auto:begin v1 -->/, '模板里没有自动块起点 —— M3 的功能不会生效')
+  assert.match(text, /<!-- ddd:auto:end -->/, '模板里没有自动块终点')
+  assert.match(text, /为什么读/, '没给"为什么读"留位置 —— 那块是判断，必须人手写')
+  assert.doesNotMatch(text, /1\. `\w+`/, '模板里不该编造具体成员（应由 frontmatter 渲染）')
 })
 
 // ---------------------------------------------------------------- 建目录

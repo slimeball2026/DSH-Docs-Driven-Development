@@ -212,7 +212,11 @@ test('N2（接线）：合法参数 + **真变化** → 正常写盘（证明白
   // 它不看我的意图，只看"实际返回了什么、schema 认不认"。
   //
   // ⇒ 加字段时的正确顺序是：① 返回值 + ② output.schema + ③ **这个数组**，三处都要改。
-  const declared = ['id', 'changed', 'added', 'removed', 'marked', 'indexed', 'basisPending']
+  const declared = [
+    'id', 'changed', 'added', 'removed', 'marked', 'indexed', 'basisPending',
+    // M3：必读清单半自动渲染（2026-11-20 拍板）—— 加字段时 ①②③ 三处都要改。
+    'requiredListApplied', 'requiredListChanged', 'requiredListWarning',
+  ]
   const extra = Object.keys(value).filter((key) => !declared.includes(key))
   assert.deepEqual(
     extra, [],
