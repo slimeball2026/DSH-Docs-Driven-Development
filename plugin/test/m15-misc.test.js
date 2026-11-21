@@ -11,7 +11,7 @@ import test from 'node:test'
 import { LAST_WRITER_FILE, recordLastWriter, relativeKeyOf } from '../adapters/last-writer.js'
 import { anomalyLine } from '../core/index.js'
 import { renderIndexBlock } from '../core/render.js'
-import { SECTIONS, checkHandover, parseHandoverSections } from '../core/handover.js'
+import { SECTIONS, parseHandoverSections } from '../core/handover.js'
 
 // ---------------------------------------------------------------- D3：lastWriter
 
@@ -232,45 +232,4 @@ test('N7：§7 的关键词表确实变长了（回归：别被改回去）', ()
   assert.ok(open.keywords.includes('仍未决'), '旧关键词不能删')
 })
 
-// ---------------------------------------------------------------- 交叉：改动不互相破坏
-
-test('M1.5 收尾项的交叉检查：一份正常交接仍然 ok:true', () => {
-  const body = `## 1. 我的意图
-
-本项目是探针项目。把东西做完。
-
-## 2. 现在到哪了
-
-| a | b |
-|---|---|
-| 1 | 2 |
-
-## 3. 下一刀
-
-- 改 \`core/gate.js\`
-
-## 4. 坑
-
-| # | 坑 |
-|---|---|
-| 1 | x |
-
-## 5. 验收
-
-- session-abc seq=1
-
-## 6. 刻意没做
-
-- 无
-
-## 7. 仍未决
-
-无
-`
-  const verdict = checkHandover({
-    meta: { id: 'h', role: 'handover', order: -10, status: 'draft' },
-    body,
-    context: { minOrder: -10, handovers: [{ id: 'h', status: 'draft', order: -10 }] },
-  })
-  assert.equal(verdict.ok, true, JSON.stringify(verdict.errors))
-})
+// M4: seven-section cross-check retired; legacy navigation parsing above remains covered.

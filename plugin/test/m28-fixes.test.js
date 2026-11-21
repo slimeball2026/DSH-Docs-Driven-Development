@@ -20,13 +20,11 @@ import test from 'node:test'
 
 import { createMarkTool } from '../tools/doc-mark.js'
 import { createNewTool, deriveId, isDerivedIdUsable } from '../tools/doc-new.js'
-import { EVIDENCE_PATTERNS, hasEvidence, checkAcceptanceEvidence, hasSubstance } from '../core/handover.js'
 import { initialIndexDoc } from '../server/init-workspace.ts'
 import { fingerprintOf } from '../docs/fingerprint.js'
 import { resolveConfig } from '../config.js'
 import { decideGate } from '../core/gate.js'
 import { denyMessage } from '../core/roles.js'
-import { registerHandoverInIndex } from '../core/registerHandover.js'
 
 // ---------------------------------------------------------------- 装配
 
@@ -111,7 +109,8 @@ function boot() {
 
   const fs = {
     resolve: async (path) => ({ targetKey: path, displayPath: path }),
-    writeText: async (target, content) => { writeFileSync(target.targetKey, content); return { operation: 'update' } },
+    stat: async (target) => ({ type: 'file', version: fingerprintOf(readFileSync(target.targetKey, 'utf8')) }),
+    writeText: async (target, content, expected) => { if (expected?.kind === 'replaceIfVersion') assert.equal(fingerprintOf(readFileSync(target.targetKey, 'utf8')), expected.version); writeFileSync(target.targetKey, content); return { operation: 'update', version: fingerprintOf(content) } },
     readText: async (target) => { try { return readFileSync(target.targetKey, 'utf8') } catch { return undefined } },
   }
 
@@ -207,64 +206,19 @@ test('**M2.8 §1 自己写过但从未读过 → 仍必须被拒**（selfWritten
 
 // ---------------------------------------------------------------- §2 H4 正则
 
-test('**M2.8 §2 `7/7 段命中` 必须命中**（第 24 轮 seq 118 的现场，多花 3 步）', () => {
-  const text = '本份交接的七段结构由 `doc_handover_check` 复检：7/7 段命中（H1–H7 无 error）。'
-  assert.equal(hasEvidence(text).ok, true, '比值与结果词之间夹了量词就不认 —— 这逼人话迁就正则')
-})
 
-test('M2.8 §2 各种"比值 + 量词 + 结果词"都要命中', () => {
-  for (const line of ['- 7/7 段命中', '- 3/3 条通过', '- 5/5 项全绿', '- 4/4 通过']) {
-    assert.equal(hasEvidence(line).ok, true, `应当命中：${line}`)
-  }
-})
 
-test('**M2.8 §2 第 25 轮两种真实写法都必须命中**（那一轮 4/4 条全挂，多花 4 步）', () => {
-  // 这两句都是**完全通顺且事实为真**的验收条目，第 25 轮 `session-18b07bcb`
-  // seq 107 判它们 4/4 条全不合格 → 它改成 `4/4 通过` 才过。
-  //
-  // AI 的反馈（seq 178 第 1 条）：
-  // > 第一版我写的是「核对通过」，被判 4/4 条全不合格……改写成 `4/4 通过` 之后立刻过了。
-  // > **校验器验证的是句子形状，而不是验证本身。**
-  const real = [
-    '- 建完两份文档后跑 `doc_health`，输出「文档健康度：5 项检查全过（3 份受管文档，1 份必读）」——5/5 全过。',
-    '- `docs/spec-1.md` 读回确认：frontmatter `id: spec-1` / `role: spec` / `order: 10` / `basis: 实测`，正文第 13 行为 `1`，核对通过。',
-  ]
-  for (const line of real) {
-    assert.equal(hasEvidence(line).ok, true, `应当命中（第 25 轮被误判的那两种）：${line.slice(0, 40)}…`)
-  }
-  // 单独钉一次「全过」这个词 —— 它是被漏掉的**结果词**本身
-  assert.equal(hasEvidence('- 5/5 全过').ok, true, '「全过」必须被当成结果词')
-  assert.equal(hasEvidence('- 核对通过').ok, true, '「核对通过」必须被认（它自带"核对"这个动作语义）')
-})
 
-test('**M2.8 §2 不许放宽过头**：只有分数 / 量词但无结果词 → 仍不算证据', () => {
-  // 这些是 H4 被打回两次的老毛病，放宽到它们等于退化成"有数字就行"
-  for (const line of ['- 3/3', '- 共 12/12 条', '- 跑了 3/3 次', '- 文件数: 4', '- 看起来没问题']) {
-    assert.equal(hasEvidence(line).ok, false, `不该被认可：${line}`)
-  }
-})
 
-test('M2.8 §2 报错文案里举的每一个例子都必须能过（文案与实现不许漂）', () => {
-  // 判据必须认得自己文案里举的示例，否则 AI 照抄示例还被拒 —— 这是第 3 次同类事故的教训
-  const examples = ['seq=42', 'session-abc123', 'sha256: a1b2c3d4', '722/722 全绿', '3/3 通过', '3/3 命中', 'tests 691 / pass 691']
-  for (const example of examples) {
-    assert.equal(hasEvidence(`- 结果：${example}`).ok, true, `文案举了但实现不认：${example}`)
-  }
-})
+
+
+
+
+
 
 // ---------------------------------------------------------------- §3 init-workspace 的 basis
 
-test('**M2.8 §3 初始化生成的 read-order 不许是 `basis: 未验证`**（否则每个新工作区必然报 H-5）', () => {
-  const text = initialIndexDoc({ projectName: '演示项目' })
-  assert.doesNotMatch(
-    text,
-    /^basis:\s*未验证$/m,
-    'H-5 判据是「authoritative 但 basis 未验证」—— 生成器自己造一条必然报的 warn',
-  )
-  assert.match(text, /^basis:\s*(实测|推断)$/m, 'basis 必须是已声明过的值')
-  // 它仍然是 authoritative：这份文档确实是项目的阅读入口
-  assert.match(text, /^status:\s*authoritative$/m)
-})
+
 
 test('M2.8 §3 生成器造的 frontmatter 仍能被激活探测认出来（id/role/status 都在）', () => {
   const text = initialIndexDoc({ projectName: '演示项目' })
@@ -310,96 +264,15 @@ test('**M2.8 §4 `doc_handover_check` 的修法提示里也不许叫人打草稿
  * 而"改了没测"和"没改"在变异看来是一样的。补测试就是补这个缺口。
  */
 
-test('**M2.8 §9 建交接改了索引，必须说出「清单条数从 N 变成 M」**', async () => {
-  // 缺陷现场：AI 严格照顺序先定稿 read-order（清单写 3 条）→ doc_health 全过
-  // → 才 doc_new 建交接 → 工具自动插成 4 条 → 交接正文里的「3 条」**当场过期**。
-  // AI 原话：「这是**你核对过的状态在核对之后被工具改掉了**。」
-  const indexText = [
-    '## 必读清单', '',
-    '按 `order` 升序：', '',
-    '1. `spec-1`（order 10）—— 甲。',
-    '2. `instruction-1`（order 20）—— 乙。',
-    '3. `read-order`（order 0）—— 丙。',
-  ].join('\n')
-  const result = registerHandoverInIndex({ text: indexText, id: 'handover-1', order: -10 })
 
-  assert.equal(result.changed, true)
-  assert.equal(
-    result.countBefore, 3,
-    '没有回传"改之前有几条" —— 模型无法知道自己那句「3 条」已经过期',
-  )
-  assert.equal(
-    result.countAfter, 4,
-    '没有回传"改之后有几条" —— 同上',
-  )
-})
 
-test('M2.8 §9 条数没变时（清单本来就空）也要如实回传', () => {
-  const result = registerHandoverInIndex({ text: '## 必读清单\n\n- （还没有必读文档。往 `docs/` 里加一份。）\n', id: 'h', order: -10 })
-  assert.equal(result.changed, true)
-  assert.equal(typeof result.countBefore, 'number')
-  assert.equal(typeof result.countAfter, 'number')
-  assert.equal(result.countAfter, 1, '换掉占位符之后应当只有 1 条')
-})
 
-test('**M2.8 §9 H4 的完整词表必须写在工具描述里**（不许只能失败后才知道）', () => {
-  // AI 原话：
-  // > 问题在于**判据是个正则，而我是在盲猜它的词表**。…
-  // > 它写挂的三条正是「`2/2 符合`」「`1/1 已读完`」「复检通过」——
-  // > 形状全对，只是结果词不在闭集里。
-  const source = readFileSync(join(import.meta.dirname, '..', 'tools', 'doc-handover-check.js'), 'utf8')
-  const descStart = source.indexOf('const DESCRIPTION = [')
-  // ⚠️ 这条测试**红过**，原因是边界找错了：
-  //    我原来用 `source.indexOf("].join('')", descStart)` 找结尾，
-  //    但 DESCRIPTION 内部现在有注释，注释里可能先出现 `].join('')` 之外的形态，
-  //    于是切片提前结束、`符合` 落在切片外 → 误报"描述里没有"。
-  //
-  //    ⇒ 用 `\n].join('')`（顶格）作边界：DESCRIPTION 是模块顶层的常量，
-  //      它的收尾一定在行首。
-  const descEnd = source.indexOf('\n].join(\'\')', descStart)
-  assert.ok(descEnd > descStart, '找不到 DESCRIPTION 的收尾 —— 源码结构变了，这条测试要跟着改')
-  const desc = source.slice(descStart, descEnd)
 
-  assert.match(desc, /通过/, '描述里没列出「通过」这个结果词')
-  assert.match(desc, /命中/, '描述里没列出「命中」')
-  assert.match(desc, /全绿/, '描述里没列出「全绿」')
-  assert.match(
-    desc, /符合/,
-    '描述里没有"不认「符合」"这句 —— 而「符合」正是第 27 轮写挂的那个词',
-  )
-})
 
-test('**M2.8 §9 标绿时 `basis` 还是「未验证」→ 回执必须当场说**', async () => {
-  // 缺陷：`doc_new` 建出来 basis: 未验证，标绿时 doc_mark 一句话不说，
-  // 等 doc_health 的 H-5 才报 —— 而那时刚标绿、再改又要重读。
-  const app = boot() // boot 的 meta 里 basis 就是 '未验证'
-  app.readFull()
-  const value = await app.mark()
 
-  assert.equal(
-    value.basisPending, true,
-    '标绿时没有标记 basis 仍未验证 —— 模型只能等 H-5 来才发现',
-  )
-  const rendered = app.tool.output.render({}, value)[0].text
-  assert.match(rendered, /未验证/, '回执里没提 basis 的事')
-  assert.match(rendered, /H-5/, '没说清后果（H-5 会报）')
-  app.cleanup()
-})
 
-test('M2.8 §9 basis 已经是「实测」时不许误报', async () => {
-  const app = boot()
-  // 把磁盘和测试桩都改成「实测」—— 桩的 `meta().basis` 读的是 `state.basis`，
-  // 所以这里要**同时**改磁盘与 state（真环境里 `rescan` 会做这件事）。
-  app.state.text = app.state.text.replace('basis: 未验证', 'basis: 实测')
-  writeFileSync(app.file, app.state.text)
-  app.state.basis = '实测'
-  app.state.fingerprint = fingerprintOf(app.state.text)
-  app.readFull()
 
-  const value = await app.mark()
-  assert.equal(value.basisPending, false, 'basis 已经是实测，却仍报"未验证"')
-  app.cleanup()
-})
+
 
 /**
  * 第 30 轮 `session-84b1e3ea`：**`doc_mark` 的成功回执自相矛盾**。
@@ -420,24 +293,7 @@ test('M2.8 §9 basis 已经是「实测」时不许误报', async () => {
  *
  * 它为此多读了 2 次文档（seq 87 / 103）。
  */
-test('**M2.8 §15 同一次调用里改了 basis → 回执不许再说"还是未验证"**', async () => {
-  const app = boot() // 初始 basis: 未验证
-  app.readFull()
 
-  const value = await app.markWith({ status: 'authoritative', basis: '实测' })
-
-  assert.equal(
-    value.basisPending, false,
-    '这次调用已经把 basis 改成「实测」了，却仍报"还是未验证" —— 回执自相矛盾，'
-      + '模型只能回读验证（第 30 轮为此外读了 2 次）',
-  )
-  const rendered = app.tool.output.render({}, value)[0].text
-  assert.doesNotMatch(
-    rendered, /还是「未验证」/,
-    '回执里仍然说 basis 是未验证 —— 而同一段话刚说「已更新 basis」',
-  )
-  app.cleanup()
-})
 
 // ---------------------------------------------------------------- §10 basis 归 doc_mark 管
 
@@ -457,20 +313,7 @@ test('**M2.8 §15 同一次调用里改了 basis → 回执不许再说"还是�
  * ⚠️ `order` 仍然**不**放开：它是结构字段，改了还要同步 `read-order` 正文
  * （"改阅读顺序是两件事"）。那一步必须被看见，不能顺手做掉。
  */
-test('**M2.8 §10 `doc_mark` 能同时改 status 和 basis**（一次落盘，不触发 H-5）', async () => {
-  const app = boot()
-  app.readFull()
-  const value = await app.markWith({ status: 'authoritative', basis: '实测' })
 
-  assert.ok(
-    value.changed.includes('basis'),
-    `changed 里应当有 basis，实际：${JSON.stringify(value.changed)}`,
-  )
-  const disk = readFileSync(app.file, 'utf8')
-  assert.match(disk, /^basis: 实测$/m, 'basis 没真的写进 frontmatter')
-  assert.match(disk, /^status: authoritative$/m, 'status 没写进去')
-  app.cleanup()
-})
 
 test('M2.8 §10 只给 basis（不给 status）也要能用', async () => {
   // 场景：文档已经 authoritative，只是 basis 还是未验证。
@@ -528,48 +371,15 @@ test('M2.8 §10 `order` 仍然**不**让 doc_mark 改（结构字段的边界）
  *
  * ⇒ 修法：形状判据之外，再查比值是否成立（分母 > 0 且 分子 ≤ 分母）。
  */
-test('**M2.8 §12 `0/0 通过` 不许算证据**（零项被验证 = 什么都没验）', () => {
-  const verdict = hasEvidence('- `0/0 通过` 级别的无缺项结论（见落盘后复检）')
-  assert.equal(
-    verdict.ok, false,
-    '`0/0 通过` 被判成合格证据 —— 判据在奖励一句明显为假的话（第 29 轮 AI 自己发现了这点）',
-  )
-  assert.equal(verdict.ratioInvalid, true, '没有标记出比值不合理')
-})
 
-test('**M2.8 §12 分子大于分母的比值不算证据**（数学上不可能）', () => {
-  for (const line of ['- 1/0 通过', '- 999/1 通过', '- 5/3 命中']) {
-    assert.equal(
-      hasEvidence(line).ok, false,
-      `数学上不可能的比值被判成证据：${line}`,
-    )
-  }
-})
 
-test('M2.8 §12 **合理的比值照常通过**（别把好证据一起打死）', () => {
-  for (const line of ['- 3/3 通过', '- 0/1 通过', '- 5/7 命中', '- 2/3 全绿']) {
-    assert.equal(
-      hasEvidence(line).ok, true,
-      `合理比值被误杀：${line}`,
-    )
-  }
-})
 
-test('M2.8 §12 比值不合理时，**其它三类证据仍然有效**（不因一个坏比值全否）', () => {
-  // 这一行同时有坏比值和合法 seq —— 该按 seq 通过。
-  const verdict = hasEvidence('- 0/0 通过，另有 `seq=42` 为证')
-  assert.equal(verdict.ok, true, 'seq 证据被一个坏比值连累掉了')
-  assert.ok(verdict.hits.includes('seq'), `命中的应是 seq，实际：${JSON.stringify(verdict.hits)}`)
-  assert.equal(verdict.ratioInvalid, true, '仍应标记比值不合理（供报错文案用）')
-})
 
-test('M2.8 §12 H4 的报错文案要能说清"比值不合理"（否则模型只会去改形状）', () => {
-  const source = readFileSync(join(import.meta.dirname, '..', 'core', 'handover.js'), 'utf8')
-  assert.match(
-    source, /ratioInvalid/,
-    '`hasEvidence` 没有把"比值不合理"这件事暴露出来 —— 模型会以为是自己形状写错了',
-  )
-})
+
+
+
+
+
 
 // ---------------------------------------------------------------- §14 纯数字 id 派生
 
@@ -647,83 +457,19 @@ test('M2.8 §14 空串 / 非法 kebab 也不算可用', () => {
  * **方向反了**：技能一直在教"§5 别放代码块"——那是让用户迁就实现。
  * Markdown 里代码块**就是**"这段不是内容"的语法，解析器必须尊重它。
  */
-test('**M2.8 §16 代码块里的列表项不算验收条目**（修前 total 从 2 变 4）', () => {
-  const text = [
-    '- 建文档：`2/2 通过`。',
-    '',
-    '```bash',
-    '- 这不是验收条目，是命令示例',
-    '- 这个也不是',
-    '```',
-    '',
-    '- 索引：`4/4 通过`。',
-  ].join('\n')
 
-  const verdict = checkAcceptanceEvidence(text)
-  assert.equal(verdict.total, 2, `代码块里的行被数进验收条目了（total=${verdict.total}）`)
-  assert.deepEqual(verdict.missing, [], '代码块里的命令示例被当成"缺证据的验收"')
-  assert.equal(verdict.ok, true, '整段被判不合格 —— 而它的两条真验收都有证据')
-})
 
-test('**M2.8 §16 代码块里的表格行不算验收条目**', () => {
-  const text = [
-    '- 建文档：`2/2 通过`。',
-    '',
-    '```',
-    '| a | b |',
-    '|---|---|',
-    '| x | y |',
-    '```',
-  ].join('\n')
 
-  const verdict = checkAcceptanceEvidence(text)
-  assert.equal(verdict.total, 1, `代码块里的表格被数进去了（total=${verdict.total}）`)
-  assert.deepEqual(verdict.missing, [], '代码块里的表格行被当成验收条目')
-})
 
-test('M2.8 §16 **带语言标记的围栏**（```js）也要认', () => {
-  const text = ['- 甲：`2/2 通过`。', '```js', '- 代码里的列表', '```'].join('\n')
-  assert.equal(checkAcceptanceEvidence(text).total, 1, '```js 这种围栏没被认出来')
-})
 
-test('M2.8 §16 `~~~` 围栏也要认', () => {
-  const text = ['- 甲：`2/2 通过`。', '~~~', '- 代码里的列表', '~~~'].join('\n')
-  assert.equal(checkAcceptanceEvidence(text).total, 1, '~~~ 围栏没被认出来')
-})
 
-test('**M2.8 §16 代码块外的真验收条目仍然要判**（别把判据整个关掉）', () => {
-  const text = [
-    '- 甲：`2/2 通过`。',
-    '```',
-    '- 代码里的列表',
-    '```',
-    '- 乙：这条没有证据形状，应当被判不合格。',
-  ].join('\n')
-  const verdict = checkAcceptanceEvidence(text)
-  assert.equal(verdict.total, 2, '代码块外应当有 2 条')
-  assert.equal(verdict.ok, false, '代码块外那条没证据的验收被放过了')
-  assert.equal(verdict.missing.length, 1, `missing 应当只有 1 条，实际 ${JSON.stringify(verdict.missing)}`)
-})
 
-test('**M2.8 §16 未闭合的围栏**：一直吞到段末（不崩、不误判）', () => {
-  // 真实里模型偶尔会漏写收尾围栏。那时从围栏到段末都算代码 ——
-  // 这会让 §5 判"没有验收条目"，**那是可见的**（比静默误判好）。
-  const text = ['- 甲：`2/2 通过`。', '```', '- 漏了收尾围栏'].join('\n')
-  const verdict = checkAcceptanceEvidence(text)
-  assert.equal(verdict.total, 1, '未闭合围栏之后的内容被当成验收条目了')
-})
 
-test('M2.8 §16 **代码块感知只属于 H4**，不能污染 `hasSubstance`', () => {
-  // `hasSubstance` 用 `isListItem` / `isTableRow` 判"这一段有没有可枚举的行"。
-  // 在那个语境里，代码块里的列表**也算内容**（一份交接的 §3 用代码块列步骤是合法的）。
-  // ⇒ 代码块感知只改 `checkAcceptanceEvidence`，不能塞进公共工具函数。
-  const withCodeBlockList = '步骤：\n\n```bash\n- 第一步\n- 第二步\n```'
-  const verdict = hasSubstance(withCodeBlockList, { enumerable: true })
-  assert.equal(
-    verdict.ok, true,
-    '`hasSubstance` 开始忽略代码块里的列表了 —— 那会让"§3 用代码块列步骤"被误判为空',
-  )
-})
+
+
+
+
+
 
 // ---------------------------------------------------------------- §8 标绿不应让已读失效
 
@@ -850,61 +596,3 @@ test('**M2.8 §6 `instruction` 的拒绝文案不许再说「draft 就能写」*
 })
 
 // ---------------------------------------------------------------- §7 交接自动登记
-
-test('**M2.8 §7 交接自动登记：插到必读清单第一条，并把原编号整体 +1**', () => {
-  const text = [
-    '---', 'id: read-order', 'role: index', '---', '',
-    '# 入口索引', '',
-    '## 必读清单', '',
-    '按 `order` 升序：', '',
-    '1. `spec-1`（order 10，spec）—— 唯一的 spec。',
-    '2. `instruction-1`（order 20，instruction）—— 指令。',
-    '',
-    '## 下一步', '',
-    '- 建交接。',
-  ].join('\n')
-
-  const result = registerHandoverInIndex({ text, id: 'handover-1', order: -10, summary: '本轮交接。' })
-  assert.equal(result.changed, true)
-  assert.match(result.text, /1\. `handover-1`/, '交接没排到第一条')
-  assert.match(result.text, /2\. `spec-1`/, '原第一条没被 +1（源码里会出现两个 1.）')
-  assert.match(result.text, /3\. `instruction-1`/, '原第二条没被 +1')
-  // 其它小节一个字节都不许动
-  assert.match(result.text, /## 下一步\n\n- 建交接。/)
-})
-
-test('M2.8 §7 已经提到这个 id → **不覆盖**（模型可能写得更好）', () => {
-  const text = [
-    '## 必读清单', '',
-    '1. `handover-1`（order -10）—— 我自己写的说明，别动。',
-  ].join('\n')
-  const result = registerHandoverInIndex({ text, id: 'handover-1', order: -10, summary: 's' })
-  assert.equal(result.changed, false)
-  assert.equal(result.text, text, '不该改一个字')
-})
-
-test('M2.8 §7 初始化占位符 → 换成交接条目', () => {
-  const text = [
-    '## 必读清单', '',
-    '<!-- 用列表列出必读文档。没有就先留空，别编。 -->', '',
-    '- （还没有必读文档。往 `docs/` 里加一份，再在这里登记。）',
-  ].join('\n')
-  const result = registerHandoverInIndex({ text, id: 'handover-1', order: -10 })
-  assert.equal(result.changed, true)
-  assert.match(result.text, /`handover-1`/)
-  assert.doesNotMatch(result.text, /还没有必读文档/, '占位符没被换掉')
-})
-
-test('M2.8 §7 没有「必读清单」小节 → **不猜结构，不改**', () => {
-  const text = '# 我的索引\n\n随便写点什么。\n'
-  const result = registerHandoverInIndex({ text, id: 'handover-1', order: -10 })
-  assert.equal(result.changed, false)
-  assert.match(result.reason, /必修清单|必读清单/)
-})
-
-test('M2.8 §7 坏输入一律不抛（空正文 / 空 id）', () => {
-  assert.doesNotThrow(() => registerHandoverInIndex({ text: '', id: 'h', order: -10 }))
-  assert.doesNotThrow(() => registerHandoverInIndex({ text: '## 必读清单\n', id: '', order: -10 }))
-  assert.doesNotThrow(() => registerHandoverInIndex(undefined))
-  assert.equal(registerHandoverInIndex({ text: '## 必读清单\n', id: '', order: -10 }).changed, false)
-})

@@ -153,7 +153,8 @@ test('**第一轮就有索引**：assemble 为空 → pre-step 后 refreshContex
   // ③ refreshContext：重新求值
   const second = resolveAll(ctx.providers, assembleContext).map((entry) => entry.text).join('')
   assert.notEqual(second, '', 'pre-step 之后仍然没有索引 —— 第一轮会缺索引')
-  assert.match(second, /alpha/, '索引里没有必读文档')
+  assert.match(second, /按目标文件/, '首轮应有准确的目标文件门禁规则')
+  assert.doesNotMatch(second, /`alpha`/, '普通 spec 不应默认注入')
 
   rmSync(root, { recursive: true, force: true })
 })
@@ -303,7 +304,8 @@ test('**运行时 cwd 优先于 header.cwd**（切目录后索引仍要出现，
   }
   const text = resolveAll(ctx.providers, { agent: { session } }).map((entry) => entry.text).join('')
   assert.notEqual(text, '', '只读了 header.cwd，切目录后索引没出现')
-  assert.match(text, /alpha/, '索引里没有必读文档')
+  assert.match(text, /实时目录/, '切目录后应有实时目录查找入口')
+  assert.doesNotMatch(text, /`alpha`/, '普通 spec 不应默认注入')
 
   rmSync(root, { recursive: true, force: true })
 })
@@ -319,7 +321,7 @@ test('workingDirectory 服务不可用时退回 header.cwd（不抛）', async (
     await handler({ agent: { session } }, async () => ({ kind: 'enter', messages: [] }))
   }
   const text = resolveAll(ctx.providers, { agent: { session } }).map((entry) => entry.text).join('')
-  assert.match(text, /alpha/, '退到 header.cwd 之后应当仍能激活')
+  assert.match(text, /实时目录/, '退到 header.cwd 之后应当仍能激活')
 
   rmSync(root, { recursive: true, force: true })
 })
@@ -337,7 +339,7 @@ test('workingDirectory.get 抛错时退回 header（不中断）', async () => {
     await handler({ agent: { session } }, async () => ({ kind: 'enter', messages: [] }))
   }
   const text = resolveAll(ctx.providers, { agent: { session } }).map((entry) => entry.text).join('')
-  assert.match(text, /alpha/, '服务抛错后应当退回 header')
+  assert.match(text, /实时目录/, '服务抛错后应当退回 header')
 
   rmSync(root, { recursive: true, force: true })
 })

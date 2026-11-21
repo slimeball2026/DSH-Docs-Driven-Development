@@ -709,7 +709,19 @@ function GraphTab({ snapshot, onOpenDoc, previewDisabled = false }) {
 		groups.get(role).push(doc);
 	}
 	const orderedRoles = [...ROLE_ORDER.filter((role) => groups.has(role)), ...groups.has("other") ? ["other"] : []];
-	return h$3("div", null, snapshot.anomalies.length > 0 ? h$3("div", { style: styles$3.anomaly }, h$3("div", { style: {
+	return h$3("div", null, h$3("div", { style: styles$3.empty }, snapshot.navigationNotice ?? "实时目录为准；旧磁盘阅读清单可能过时。"), snapshot.entryPoint ? h$3("button", {
+		type: "button",
+		style: {
+			...styles$3.button,
+			marginBottom: "10px",
+			cursor: previewDisabled || onOpenDoc === void 0 ? "default" : "pointer"
+		},
+		title: previewDisabled ? "请在会话页的 DDD 面板打开入口文档" : "打开当前交接或项目入口；可继续修订",
+		disabled: previewDisabled || onOpenDoc === void 0,
+		onClick: () => {
+			if (snapshot.entryPoint) onOpenDoc?.(snapshot.entryPoint);
+		}
+	}, `当前接续入口：${snapshot.entryPoint.title || snapshot.entryPoint.id}`) : null, snapshot.anomalies.length > 0 ? h$3("div", { style: styles$3.anomaly }, h$3("div", { style: {
 		fontWeight: 600,
 		marginBottom: "4px"
 	} }, `⚠️ 文档异常（${snapshot.anomalies.length}）—— 这些文档现在就有问题`), snapshot.anomalies.map((item) => h$3("div", {
@@ -1258,10 +1270,10 @@ function ReadOrderBar({ snapshot, onOpenDoc, previewDisabled = false, sessionId 
 		type: "button",
 		onClick: toggle,
 		style: styles$2.fab,
-		title: `展开 AI 阅读顺序（${progress.read}/${progress.total} 已读）`,
-		"aria-label": "展开 AI 阅读顺序"
+		title: `展开参考目录（${progress.read}/${progress.total} 已读）`,
+		"aria-label": "展开参考目录"
 	}, `${progress.read}/${progress.total}`);
-	return h$2("div", { style: styles$2.bar }, h$2("div", { style: styles$2.head }, h$2("span", { style: styles$2.title }, "AI 阅读顺序"), h$2("span", { style: styles$2.progress }, `${progress.read}/${progress.total}`, progress.ready ? " ✅ 已读完" : " ⏳ 还没读完"), h$2("span", {
+	return h$2("div", { style: styles$2.bar }, h$2("div", { style: styles$2.head }, h$2("span", { style: styles$2.title }, "参考目录"), h$2("span", { style: styles$2.progress }, `${progress.read}/${progress.total}`, progress.ready ? " ✅ 已读完" : " · 按任务阅读"), h$2("span", {
 		style: styles$2.hint,
 		title: LEGEND_SUB
 	}, LEGEND_MAIN), h$2("span", {
@@ -1279,9 +1291,9 @@ function ReadOrderBar({ snapshot, onOpenDoc, previewDisabled = false, sessionId 
 			style: clickable ? styles$2.chip : styles$2.chipStatic,
 			...clickable ? { onClick: () => onOpenDoc(item) } : {},
 			title: clickable ? `${item.summary === "" ? item.id : item.summary}` : `${item.summary === "" ? item.id : item.summary}（预览需在会话页打开）`
-		}, h$2("span", { style: styles$2.seq }, String(item.seq)), h$2("span", { title: `置信度：${item.status}` }, statusMarkOf(item.status)), h$2("span", { style: styles$2.chipId }, item.id === "" ? "(无 id)" : item.id), h$2("span", {
+		}, h$2("span", { style: styles$2.seq }, String(item.seq)), h$2("span", { title: `文档状态：${item.status}` }, statusMarkOf(item.status)), h$2("span", { style: styles$2.chipId }, item.id === "" ? "(无 id)" : item.id), h$2("span", {
 			style: item.read ? styles$2.readMark : styles$2.unreadMark,
-			title: item.read ? "AI 已读过（指纹一致）" : "AI 还没读",
+			title: item.read ? "AI 曾读过（阅读记录，不代表当前版本或写权限）" : "AI 还没读",
 			"aria-label": item.read ? "已读" : "未读"
 		}, item.read ? "✓" : ""));
 	})));
@@ -1306,8 +1318,8 @@ function ReadOrderBar({ snapshot, onOpenDoc, previewDisabled = false, sessionId 
 *   2. `✓` 是**接手时读完**的记录，**不会因为改文档而消失**；
 *   3. 你点开**不算** AI 已读（R-5，防止当 bug 报）。
 */
-const LEGEND_MAIN = "接手清单 ｜ 🟢 置信度 ｜ ✓ = AI 已读完";
-const LEGEND_SUB = "（✓ 只增不减：改文档不会撤销它。你点开不算 AI 已读）";
+const LEGEND_MAIN = "参考目录 ｜ 🟢 状态 ｜ ✓ = AI 读过";
+const LEGEND_SUB = "按任务选择阅读，不要求先读完整个目录。✓ 只增不减；点开不算 AI 已读。";
 /**
 * 那几行的样式。
 *
@@ -1979,7 +1991,7 @@ function SessionTabInner({ sessionId = "", wiring }) {
 	}, [controller]);
 	if (wiring === void 0) return h$1("div", { style: styles$1.note }, "页签没有接上数据源（装配缺失，这是插件的问题）。");
 	if (sessionId === "") return h$1("div", { style: styles$1.note }, "拿不到会话 id：这个页签只能在会话页的右栏里用。");
-	if (cwd === "") return h$1("div", { style: styles$1.note }, h$1("div", { style: styles$1.noteTitle }, "拿不到这个会话的项目目录"), h$1("div", null, "DDD 需要知道项目根才能读门禁。会话元数据里暂时没有 cwd —— 等宿主回填后重开这个页签，或到主栏「文档驱动开发」里手动选一个目录。"));
+	if (cwd === "") return h$1("div", { style: styles$1.note }, h$1("div", { style: styles$1.noteTitle }, "拿不到这个会话的项目目录"), h$1("div", null, "DDD 需要知道项目根才能读取目录。会话元数据里暂时没有 cwd —— 等宿主回填后重开这个页签，或到主栏「文档驱动开发」里手动选一个目录。"));
 	if (controller === void 0) return h$1(LoadingView);
 	const snapshot = controller.getSnapshot();
 	const error = controller.getError();
@@ -2034,7 +2046,7 @@ function SessionTabInner({ sessionId = "", wiring }) {
 	};
 	return h$1("div", { style: styles$1.page }, h$1("div", { style: styles$1.meta }, `会话目录：${cwd}`, h$1("span", { style: styles$1.metaDim }, "（自动，无需手选）")), snapshot.nextStep !== "" ? h$1("div", {
 		style: styles$1.nextStep,
-		title: "交接文档 §3「下一刀」的第一条"
+		title: "当前已发布交接中记录的后续动作；没有后续任务时无需填写"
 	}, h$1("span", { style: styles$1.nextStepLabel }, "下一步"), h$1("span", null, snapshot.nextStep)) : null, h$1("div", { style: styles$1.bodyFill }, h$1(MainPage, {
 		snapshot,
 		onOpenDoc,
@@ -2419,7 +2431,7 @@ function BodyWith({ controller, render, footer }) {
 	const { snapshot, error, loading } = useControllerState(controller);
 	react.useEffect(() => watchVisibility(controller), [controller]);
 	react.useEffect(() => watchPolling(controller, DEFAULT_POLL_INTERVAL_MS), [controller]);
-	if (controller.getChosenCwd() === "" && snapshot === void 0 && !loading) return h("div", { style: styles.pageEmpty }, h("div", { style: styles.pageEmptyTitle }, "请先选择项目根"), h("div", { style: styles.pageEmptyBody }, "宿主不会告诉面板\"当前是哪个项目\"，所以需要你在上面的下拉里选一个。"), h("div", { style: styles.pageEmptyBody }, "选完会立刻读取该项目的门禁与文档清单。"));
+	if (controller.getChosenCwd() === "" && snapshot === void 0 && !loading) return h("div", { style: styles.pageEmpty }, h("div", { style: styles.pageEmptyTitle }, "请先选择项目根"), h("div", { style: styles.pageEmptyBody }, "宿主不会告诉面板\"当前是哪个项目\"，所以需要你在上面的下拉里选一个。"), h("div", { style: styles.pageEmptyBody }, "选完会读取该项目的当前入口、文档目录与阅读记录。"));
 	if (error !== void 0) return h(ErrorView, {
 		message: error,
 		onRetry: controller.refresh

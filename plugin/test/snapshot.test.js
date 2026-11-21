@@ -333,20 +333,12 @@ function assertGateMatchesIndex(readSet) {
 
   const snap = buildSnapshot({ entries, readSet, sessionId: 'session-abc123' })
 
-  // 从索引块正文里抠出 `【门禁】N/M`
-  const matched = /【门禁】(\d+)\/(\d+)/.exec(block)
-  assert.ok(matched !== null, `索引块里没有【门禁】行：\n${block}`)
+  assert.equal(snap.entryPoint.id, 'handover-m2')
+  assert.match(block, /【入口】`handover-m2`/)
+  assert.equal(snap.required.length, buildIndexForTest(entries).required.length)
+  assert.doesNotMatch(block, /【门禁】\d+\/\d+/)
+  assert.match(snap.navigationNotice, /旧磁盘阅读清单可能过时/)
 
-  assert.equal(
-    snap.gate.read,
-    Number(matched[1]),
-    `看板的 gate.read=${snap.gate.read} 与索引块的【门禁】${matched[1]}/${matched[2]} 不一致`,
-  )
-  assert.equal(
-    snap.gate.required,
-    Number(matched[2]),
-    `看板的 gate.required=${snap.gate.required} 与索引块的【门禁】${matched[1]}/${matched[2]} 不一致`,
-  )
 }
 
 /** 测试内部用：直接借 buildIndex（与 snapshot 用的是同一个函数）。 */
@@ -354,15 +346,15 @@ function buildIndexForTest(entries) {
   return buildIndexRef(entries)
 }
 
-test('**同源一致性：未读时看板与【门禁】完全一致**（M2-2）', () => {
+test('**同源一致性：未读时看板入口与注入一致且保留完整目录**（M2-2）', () => {
   assertGateMatchesIndex(EMPTY_READ)
 })
 
-test('**同源一致性：读了一部分时两处仍一致**（M2-2 的「读过 1 份后仍一致」）', () => {
+test('**同源一致性：读了一部分时两处入口仍一致**（M2-2 的「读过 1 份后仍一致」）', () => {
   assertGateMatchesIndex(readSetOf([['read-order', 'fp-read-order']]))
 })
 
-test('**同源一致性：全部读完时两处仍一致**', () => {
+test('**同源一致性：全部读完时两处入口仍一致**', () => {
   assertGateMatchesIndex(readSetOf([
     ['read-order', 'fp-read-order'],
     ['handover-m2', 'fp-handover-m2'],
@@ -371,8 +363,18 @@ test('**同源一致性：全部读完时两处仍一致**', () => {
   ]))
 })
 
-test('**同源一致性：指纹过期（读了旧版）时两处仍一致**', () => {
+test('**同源一致性：指纹过期（读了旧版）时两处入口仍一致**', () => {
   assertGateMatchesIndex(readSetOf([['read-order', 'fp-旧版本']]))
+})
+
+test('M4 snapshot 当前入口与完整有效目录分开；草稿不抢入口', () => {
+  const entries = [...sampleEntries(), docOf('draft', 'handover', -100, { status: 'draft' })]
+  const snap = buildSnapshot({ entries, sessionId: 'session-test' })
+  assert.equal(snap.entryPoint.id, 'handover-m2')
+  assert.equal(snap.required.length, 4)
+  assert.ok(snap.all.some((item) => item.id === 'draft'))
+  const fallback = buildSnapshot({ entries: entries.filter((entry) => entry.meta.role !== 'handover'), sessionId: 'session-test' })
+  assert.equal(fallback.entryPoint.id, 'read-order')
 })
 
 // ---------------------------------------------------------------- 9. 稳定性

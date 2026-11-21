@@ -64,7 +64,8 @@ import { initWorkspace } from './server/init-workspace.ts'
 import { deliverablesOf, graveyardCandidatesOf, graveyardOf, presentedPathsOf } from './server/deliverables.ts'
 import { archiveDocuments, restoreDocuments } from './server/write-engine.ts'
 import { projectLineOf, sliceLineOf } from './core/render.js'
-import { handoverPointersOf, primaryHandoverOf } from './core/pointers.js'
+import { handoverPointersOf } from './core/pointers.js'
+import { currentHandoverOf } from './core/navigation.js'
 import { computeBudget } from './core/budget.js'
 
 /** 插件名（Cordis plugin name）。 */
@@ -98,7 +99,7 @@ export const name = 'ddd-engine'
 export const inject = ['tools', 'systemPrompt', 'fs', 'webServer']
 
 /** 本 bundle 的版本（V9 锚点用）。 */
-export const BUNDLE_VERSION = '0.1.0'
+export const BUNDLE_VERSION = '1.2.0-m4.4'
 
 /**
  * 收集当前环境锚点（M1.5 / **D6**）。
@@ -970,7 +971,7 @@ export function apply(ctx, config) {
   function pointersOf(registry, sessionId) {
     const empty = { nextStep: '', basisDoc: null }
     try {
-      const entry = primaryHandoverOf(registry?.entries)
+      const entry = currentHandoverOf(registry?.entries)
       if (entry === undefined) return empty
 
       const id = entry?.meta?.id

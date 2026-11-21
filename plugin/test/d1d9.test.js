@@ -114,70 +114,17 @@ test('D1 ①：**交接的负 order 不拉动**其它文档的 nextOrder', () =>
 
 // ---------------------------------------------------------------- ③ H7 跳过 superseded
 
-test('D9 ③：**superseded 的交接不报 H7**（缺这一步就是永久红灯）', () => {
-  const verdict = checkHandover({
-    meta: { id: 'handover-old', role: 'handover', order: 0, status: 'superseded' },
-    body: GOOD_BODY,
-    context: { minOrder: -10, handovers: [{ id: 'handover-old', status: 'superseded', order: 0 }] },
-  })
-  assert.equal(verdict.errors.some((item) => item.rule === 'H7'), false)
-  assert.equal(verdict.warnings.some((item) => item.rule === 'H7'), false)
-  assert.equal(verdict.ok, true, '被取代的旧交接必须 ok:true（正向判据）')
-})
 
-test('D9 ③：superseded **且** order 正确 → 也不报 H7', () => {
-  const verdict = checkHandover({
-    meta: { id: 'handover-old', role: 'handover', order: -10, status: 'superseded' },
-    body: GOOD_BODY,
-    context: { minOrder: -10, handovers: [{ id: 'handover-old', status: 'superseded', order: -10 }] },
-  })
-  assert.equal(verdict.errors.some((item) => item.rule === 'H7'), false)
-})
+
+
 
 // ---------------------------------------------------------------- ④ H7 是 error
 
-test('D9 ④：H7 **是 error**（这是 P6 的唯一可证伪证据）', () => {
-  const verdict = checkHandover({
-    meta: { id: 'handover-x', role: 'handover', order: 999, status: 'authoritative' },
-    body: GOOD_BODY,
-    context: { minOrder: 20, handovers: [{ id: 'handover-x', status: 'authoritative', order: 999 }] },
-  })
-  const h7 = verdict.errors.find((item) => item.rule === 'H7')
-  assert.ok(h7 !== undefined, 'H7 必须在 errors 里')
-  assert.equal(h7.level, 'error')
-  assert.equal(verdict.ok, false)
-  assert.equal(verdict.warnings.some((item) => item.rule === 'H7'), false, '不能同时又出现在 warnings 里')
-})
 
-test('D9 ④：order 正确时不报（防止"永远报"）', () => {
-  const verdict = checkHandover({
-    meta: { id: 'handover-x', role: 'handover', order: 20, status: 'authoritative' },
-    body: GOOD_BODY,
-    context: { minOrder: 20, handovers: [{ id: 'handover-x', status: 'authoritative', order: 20 }] },
-  })
-  assert.equal(verdict.errors.some((item) => item.rule === 'H7'), false)
-})
 
-test('D9：三份交接共存时的完整矩阵（① + ② + ③ + ④ 一起）', () => {
-  // 真实形态：一份被取代的旧交接（order 0）+ 一份当前的（order -10）+ 一份排错的（order 999）
-  const handovers = [
-    { id: 'old', status: 'superseded', order: 0 },
-    { id: 'current', status: 'authoritative', order: -10 },
-    { id: 'wrong', status: 'authoritative', order: 999 },
-  ]
-  const minOrder = -10
-  const verify = (id, status, order) => checkHandover({
-    meta: { id, role: 'handover', order, status },
-    body: GOOD_BODY,
-    context: { minOrder, handovers },
-  })
 
-  assert.equal(verify('old', 'superseded', 0).ok, true, 'superseded 不报')
-  assert.equal(verify('current', 'authoritative', -10).ok, true, 'order 正确不报')
-  const wrong = verify('wrong', 'authoritative', 999)
-  assert.equal(wrong.ok, false, 'order 排错的权威交接必须失败')
-  assert.deepEqual(wrong.errors.filter((i) => i.rule === 'H7').length, 1)
-})
+
+
 
 // ---------------------------------------------------------------- 交接结构本身没被改坏
 
@@ -187,78 +134,3 @@ test('D9 改动不影响 H1：七段仍能解析', () => {
 })
 
 // ---------------------------------------------------------------- D1 ②：取代范围（回归）
-
-test('D1 ② 回归：**draft 的旧交接也要被取代**（端到端验证抓到的真 bug）', async () => {
-  // ⚠️ 这条是 `_m15/repro-e2e.mjs` 抓出来的**真实缺陷**，不是设想出来的。
-  //
-  // 第一版 `supersedeOldHandovers` 只标 `status === 'authoritative'`。
-  // 但 `doc_new` 建交接的**默认 status 是 draft** ——
-  // 所以"建第二份交接"时，第一份也是 draft，**一个都不标**。
-  // 结果：两份 draft 交接共存，"新交接取代旧的"这个语义完全没发生，H6 照报。
-  //
-  // 修法：同 role 的现存交接，只要不是 `superseded`/`void`/`sealed`（终态），都标。
-  const { supersedeOldHandovers } = await import('../tools/doc-new.js')
-
-  /** 造一个能记账的假 fs。 */
-  const files = new Map()
-  const fs = {
-    resolve: async (p) => ({ displayPath: p, targetKey: p }),
-    writeText: async (target, content) => { files.set(target.targetKey ?? target, content) },
-  }
-
-  const entries = [
-    { path: 'C:/proj/docs/h-old.md', meta: { id: 'h-old', role: 'handover', order: -10, status: 'draft' }, text: '---\nid: h-old\norder: -10\nstatus: draft\n---\n\n正文\n' },
-    { path: 'C:/proj/docs/h-new.md', meta: { id: 'h-new', role: 'handover', order: -20, status: 'draft' }, text: '---\nid: h-new\norder: -20\nstatus: draft\n---\n\n正文\n' },
-    { path: 'C:/proj/docs/spec-x.md', meta: { id: 'spec-x', role: 'spec', order: 10, status: 'authoritative' }, text: '---\nid: spec-x\n---\n' },
-  ]
-  const reg = { entries, rescan: async () => {} }
-
-  const done = await supersedeOldHandovers({
-    reg,
-    fs,
-    selfId: 'h-new',
-    projectRoot: 'C:/proj',
-    exec: {},
-    logger: undefined,
-  })
-
-  assert.deepEqual(done, ['h-old'], 'draft 的旧交接必须被取代（不是只标 authoritative）')
-  const written = files.get('C:/proj/docs/h-old.md')
-  assert.match(written, /^status: superseded$/m)
-  assert.match(written, /supersededBy: \["h-new"\]/)
-})
-
-test('D1 ② 回归：终态（superseded / void / sealed）不重复标', async () => {
-  const { supersedeOldHandovers } = await import('../tools/doc-new.js')
-  const files = new Map()
-  const fs = {
-    resolve: async (p) => ({ displayPath: p, targetKey: p }),
-    writeText: async (target, content) => { files.set(target.targetKey ?? target, content) },
-  }
-  const entries = ['superseded', 'void', 'sealed'].map((status, index) => ({
-    path: `C:/proj/docs/h-${status}.md`,
-    meta: { id: `h-${status}`, role: 'handover', order: index, status },
-    text: `---\nid: h-${status}\nstatus: ${status}\n---\n`,
-  }))
-  const done = await supersedeOldHandovers({
-    reg: { entries, rescan: async () => {} }, fs, selfId: 'h-new', projectRoot: 'C:/proj', exec: {},
-  })
-  assert.deepEqual(done, [], '终态不该被再标一次（多一次无意义写入）')
-})
-
-test('D1 ② 回归：非 handover 的文档**绝不**被标 superseded', async () => {
-  const { supersedeOldHandovers } = await import('../tools/doc-new.js')
-  const files = new Map()
-  const fs = {
-    resolve: async (p) => ({ displayPath: p, targetKey: p }),
-    writeText: async (target, content) => { files.set(target.targetKey ?? target, content) },
-  }
-  const entries = [
-    { path: 'C:/proj/docs/spec-x.md', meta: { id: 'spec-x', role: 'spec', order: 10, status: 'authoritative' }, text: '---\nid: spec-x\n---\n' },
-  ]
-  const done = await supersedeOldHandovers({
-    reg: { entries, rescan: async () => {} }, fs, selfId: 'h-new', projectRoot: 'C:/proj', exec: {},
-  })
-  assert.deepEqual(done, [])
-  assert.equal(files.size, 0, '非交接文档一个字节都不该被写')
-})

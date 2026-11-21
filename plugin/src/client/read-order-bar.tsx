@@ -179,17 +179,17 @@ export function ReadOrderBar({
       type: 'button',
       onClick: toggle,
       style: styles.fab,
-      title: `展开 AI 阅读顺序（${progress.read}/${progress.total} 已读）`,
-      'aria-label': '展开 AI 阅读顺序',
+      title: `展开参考目录（${progress.read}/${progress.total} 已读）`,
+      'aria-label': '展开参考目录',
     }, `${progress.read}/${progress.total}`)
   }
 
   return h('div', { style: styles.bar },
     h('div', { style: styles.head },
-      h('span', { style: styles.title }, 'AI 阅读顺序'),
+      h('span', { style: styles.title }, '参考目录'),
       h('span', { style: styles.progress },
         `${progress.read}/${progress.total}`,
-        progress.ready ? ' ✅ 已读完' : ' ⏳ 还没读完'),
+        progress.ready ? ' ✅ 已读完' : ' · 按任务阅读'),
       h('span', { style: styles.hint, title: LEGEND_SUB }, LEGEND_MAIN),
       // ---- 方案 C（用户 2026-11-14 拍板）：明说"重启会清空"，不落盘 ----
       //
@@ -228,7 +228,7 @@ export function ReadOrderBar({
           h('span', { style: styles.seq }, String(item.seq)),
           // 置信度徽标（🟢/🟡/⚪/🔵/🔴/🟠）——**这是 status，不是已读**。
           // 与后面的已读标记**视觉上必须能分开**：它是 emoji，已读标记是几何形状。
-          h('span', { title: `置信度：${item.status}` }, statusMarkOf(item.status)),
+          h('span', { title: `文档状态：${item.status}` }, statusMarkOf(item.status)),
           h('span', { style: styles.chipId }, item.id === '' ? '(无 id)' : item.id),
           // 已读标记：**不用颜色**，用形状区分。
           //
@@ -238,7 +238,7 @@ export function ReadOrderBar({
           // 两者都不占用"绿色"这个通道 —— 绿色从此专属于置信度。
           h('span', {
             style: item.read ? styles.readMark : styles.unreadMark,
-            title: item.read ? 'AI 已读过（指纹一致）' : 'AI 还没读',
+            title: item.read ? 'AI 曾读过（阅读记录，不代表当前版本或写权限）' : 'AI 还没读',
             'aria-label': item.read ? '已读' : '未读',
           }, item.read ? '✓' : ''),
         )
@@ -267,8 +267,8 @@ export function ReadOrderBar({
  *   2. `✓` 是**接手时读完**的记录，**不会因为改文档而消失**；
  *   3. 你点开**不算** AI 已读（R-5，防止当 bug 报）。
  */
-const LEGEND_MAIN = '接手清单 ｜ 🟢 置信度 ｜ ✓ = AI 已读完'
-const LEGEND_SUB = '（✓ 只增不减：改文档不会撤销它。你点开不算 AI 已读）'
+const LEGEND_MAIN = '参考目录 ｜ 🟢 状态 ｜ ✓ = AI 读过'
+const LEGEND_SUB = '按任务选择阅读，不要求先读完整个目录。✓ 只增不减；点开不算 AI 已读。'
 
 /**
  * 那几行的样式。

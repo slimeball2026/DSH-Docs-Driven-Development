@@ -1,5 +1,5 @@
 /**
- * `core/health.js` 的单测（H-1 – H-5）。
+ * `core/health.js` 的单测（H-1 – H-4）。
  *
  * **每条检查都配反例**：只测「没问题时返回 ok」等于没测。
  * 其中 H-3 是重定义过的（README 订正清单第 3 条），所以额外钉住
@@ -12,7 +12,6 @@ import test from 'node:test'
 import {
   HEALTH_RULES,
   checkHealth,
-  mentionsDoc,
 } from '../core/health.js'
 
 /**
@@ -44,12 +43,12 @@ function idsOf(result, rule) {
 
 // ---------------------------------------------------------------- 0. 基准
 
-test('五项检查都在（不多不少）', () => {
-  assert.deepEqual(HEALTH_RULES.map((item) => item.rule), ['H-1', 'H-2', 'H-3', 'H-4', 'H-5'])
-  assert.ok(HEALTH_RULES.every((item) => item.level === 'warn'), '五项都该是 warn，不是 error')
+test('四项检查都在（不多不少）', () => {
+  assert.deepEqual(HEALTH_RULES.map((item) => item.rule), ['H-1', 'H-2', 'H-3', 'H-4'])
+  assert.ok(HEALTH_RULES.every((item) => item.level === 'warn'), '四项都该是 warn，不是 error')
 })
 
-test('干净的文档集 → ok:true、issues 为空、byRule 五项都是 0', () => {
+test('干净的文档集 → ok:true、issues 为空、byRule 四项都是 0', () => {
   // ⚠️ M1.5 / D7 改了这条的前提：**项目里必须有一份 role: index 的文档**才算"干净"。
   //
   // 修之前这条用的是 `health([doc('a')])`（只有一份 spec，没有索引文档），
@@ -62,7 +61,7 @@ test('干净的文档集 → ok:true、issues 为空、byRule 五项都是 0', (
   ])
   assert.equal(result.ok, true)
   assert.deepEqual(result.issues, [])
-  assert.deepEqual(result.stats.byRule, { 'H-1': 0, 'H-2': 0, 'H-3': 0, 'H-4': 0, 'H-5': 0 })
+  assert.deepEqual(result.stats.byRule, { 'H-1': 0, 'H-2': 0, 'H-3': 0, 'H-4': 0 })
 })
 
 test('D7：项目里**没有任何 role: index 文档** → 报 1 条项目级 warn（不再静默跳过）', () => {
@@ -70,7 +69,7 @@ test('D7：项目里**没有任何 role: index 文档** → 报 1 条项目级 w
   const h3 = result.issues.filter((item) => item.rule === 'H-3')
   assert.equal(h3.length, 1, '只报 1 条，不逐份刷')
   assert.equal(h3[0].docId, '(项目)')
-  assert.match(h3[0].message, /role: index/)
+  assert.match(h3[0].message, /index/)
   assert.equal(result.ok, true, '仍然是 warn，不阻塞')
 })
 
@@ -193,129 +192,30 @@ test('**H-2 的循环真的会跑**：长链也能走到终点（回归 managed.
   assert.ok(idsOf(broken, 'H-2').includes('d3'), '断掉的链没有被发现 —— 循环可能没跑')
 })
 
-// ---------------------------------------------------------------- 3. H-3 不可达（重定义）
+// ---------------------------------------------------------------- H-3 shared entry discoverability
 
-test('**H-3：authoritative 但谁都没提 → 报**（重定义后的判据）', () => {
-  const result = checkHealth({
-    entries: [doc('index-doc', { role: 'index' }), doc('orphan')],
-    required: [doc('index-doc', { role: 'index' })],
-  })
-  assert.deepEqual(idsOf(result, 'H-3'), ['orphan'])
-  assert.equal(result.stats.docs, 2)
-})
-
-test('H-3：被 role: index 的文档**按 id**提到 → 不报', () => {
-  const result = checkHealth({
-    entries: [
-      doc('index-doc', { role: 'index' }, { text: '先读 orphan，再读别的' }),
-      doc('orphan'),
-    ],
-    required: [doc('index-doc', { role: 'index' })],
-  })
+test('M4 H-3: valid index needs no body listing for other documents', () => {
+  const result = health([doc('index', { role: 'index' }), doc('orphan')])
   assert.deepEqual(idsOf(result, 'H-3'), [])
 })
 
-test('**H-3：按文件名提到也算**（dogfood 的 read-order 就是这么引用的）', () => {
-  const result = checkHealth({
-    entries: [
-      doc('index-doc', { role: 'index' }, { text: '阅读顺序：00. 阅读顺序.md → 01. 交接.md' }),
-      doc('orphan', {}, { path: 'C:/proj/docs/00. 阅读顺序.md' }),
-    ],
-    required: [doc('index-doc', { role: 'index' })],
-  })
+test('M4 H-3: published handover is an entry without an index', () => {
+  const result = health([doc('h', { role: 'handover' }), doc('spec')])
   assert.deepEqual(idsOf(result, 'H-3'), [])
 })
 
-test('H-3：**被别的 role: index 文档提到** → 不报（可达）', () => {
-  // ⚠️ 这条原来叫「在必读清单里 → 不报」，靠的是 `required` 参数。
-  // 但 A4 修复时 H-3 **整个去掉了"在 must-read 里"那一半**（它恒假，见 health.js 的注释），
-  // 现在判据只剩「有没有被 role: index 提到」。所以这条测试的**输入也要跟着改**——
-  // 否则它测的是一个已经不存在的条件（"看起来在测，其实什么都没测"）。
-  //
-  // M1.5 / D7 又加了一条前提：项目里得有 index 文档（否则多一条项目级 warn）。
-  const indexDoc = doc('read-order', { role: 'index' }, { text: '# 阅读顺序\n\n先读 `in-required`。\n' })
-  const target = doc('in-required')
-  const result = checkHealth({ entries: [indexDoc, target], required: [indexDoc, target] })
-  assert.deepEqual(idsOf(result, 'H-3'), [])
+test('M4 H-3: drafts, invalid documents and graveyard entries are not entry points', () => {
+  for (const bad of [doc('h', { role: 'handover', status: 'draft' }),
+    doc('i', { role: 'index' }, { hasError: true }),
+    { ...doc('h', { role: 'handover' }), inGraveyard: true }]) {
+    const result = health([bad, doc('s')])
+    assert.deepEqual(idsOf(result, 'H-3'), ['(项目)'])
+  }
 })
 
-test('H-3：有 error 的文档不报（归因不同，由 anomalies 负责）', () => {
-  const indexDoc = doc('read-order', { role: 'index', body: '# 阅读顺序\n\n先读 `broken`。\n' })
-  const result = checkHealth({
-    entries: [indexDoc, doc('broken', {}, { hasError: true })],
-    required: [],
-  })
-  assert.deepEqual(idsOf(result, 'H-3'), [])
-})
-
-test('H-3：index 文档自己不被要求"被别人提到"', () => {
-  const result = checkHealth({
-    entries: [doc('index-doc', { role: 'index' })],
-    required: [],
-  })
-  assert.deepEqual(idsOf(result, 'H-3'), [])
-})
-
-test('**H-3 重定义的理由**：原定义（authoritative 但不在必读）在正常数据上恒真不可达', () => {
-  // 模拟 buildIndex 的划分：所有无 error 的 authoritative 都会进 required。
-  // 于是「authoritative 且不在 required」只可能出现在 hasError 的文档上，
-  // 而那种情况的归因是「元数据坏了」。这里把它钉成一条可执行的断言。
-  const entries = [doc('a'), doc('b'), doc('c')]
-  const required = entries.filter((entry) => entry.meta.status === 'authoritative' && entry.hasError !== true)
-  const originalDefinitionHits = entries.filter((entry) => entry.meta.status === 'authoritative'
-    && !required.includes(entry))
-  assert.deepEqual(originalDefinitionHits, [], '原定义在正常数据上命中数必须是 0（恒真）')
-})
-
-// ---- A4 独立评审：H-3 第一版**在生产路径上恒不触发**
-
-test('**H-3：走生产路径（required = buildIndex 的产物）也必须能触发**（A4 反例）', async () => {
-  // 第一版判据含「不在必读清单」，而 doc-health.js 传的 required 就是 buildIndex 的产物，
-  // 它把所有无 error 的 authoritative 都放进 required → 那个条件**永远为假**。
-  // 单测当时手工传 required 才过，**绕开了接线**。
-  //
-  // 这条测试刻意走**真实接线**：用 buildIndex 算 required，再喂给 checkHealth。
-  const { buildIndex } = await import('../core/index.js')
-  const entries = [doc('idx', { role: 'index' }), doc('orphan')]
-  const required = buildIndex(entries).required
-  assert.ok(required.some((entry) => entry.meta.id === 'orphan'), '前提：buildIndex 确实把 orphan 放进 required')
-  const result = checkHealth({ entries, required })
-  assert.deepEqual(idsOf(result, 'H-3'), ['orphan'], 'H-3 在生产路径上恒不触发（A4 说的就是这个）')
-})
-
-test('**H-3：没有 role: index 文档时③逐份不报，但报 1 条项目级 warn**（M1.5 / D7 反转了这条）', () => {
-  // ⚠️ 这条测试的结论被 M1.5 的 D7 **刻意反转**了。
-  //
-  // 修之前：`if (indexDocs.length === 0) continue` → 整段 H-3 静默跳过，
-  // 于是"项目里没有任何入口索引"这件事**在输出里完全看不见**。
-  //
-  // 改之后：仍然不逐份报（否则 N 份 authoritative 会刷 N 条一模一样的"), 但**项目级报 1 条**。
-  //
-  // 为什么值得报：新会话没有入口索引 = 它不知道该先读哪一份。
-  // 那正是 H-3 想抓的问题（"这份权威文档，读者怎么知道它存在？"）的**极端形态**，
-  // 不是"无法判定所以不用管"。
-  const result = checkHealth({ entries: [doc('solo')], required: [] })
-  const h3 = result.issues.filter((item) => item.rule === 'H-3')
-  assert.equal(h3.length, 1, '不逐份报，只报 1 条项目级')
-  assert.equal(h3[0].docId, '(项目)')
-  assert.equal(idsOf(result, 'H-3').includes('solo'), false, '**不**逐份点名 solo')
-})
-
-test('H-3 不再依赖 required：传不传结果都一样', async () => {
-  const { buildIndex } = await import('../core/index.js')
-  const entries = [doc('idx', { role: 'index' }), doc('orphan')]
-  const withRequired = checkHealth({ entries, required: buildIndex(entries).required })
-  const without = checkHealth({ entries })
-  assert.deepEqual(idsOf(withRequired, 'H-3'), idsOf(without, 'H-3'))
-})
-
-test('mentionsDoc：三种写法都认，且不因编号误命中', () => {
-  const target = { id: 'read-order', title: '00 · 阅读顺序（档 2 施工者从这里开始）', fileName: '00. 阅读顺序.md' }
-  assert.equal(mentionsDoc('见 read-order', target), true)
-  assert.equal(mentionsDoc('见 00. 阅读顺序.md', target), true)
-  assert.equal(mentionsDoc('见 阅读顺序（档 2 施工者从这里开始）', target), true)
-  // 只提到编号 `00` 不算提到这份文档
-  assert.equal(mentionsDoc('第 00 份', { ...target, id: 'x', fileName: '', title: '' }), false)
+test('M4 H-3: reference list parameter cannot change entry discovery', () => {
+  const entries = [doc('i', { role: 'index' }), doc('s')]
+  assert.deepEqual(health(entries).issues, health(entries, { required: [] }).issues)
 })
 
 // ---------------------------------------------------------------- 4. H-4 锚点漂移
@@ -365,31 +265,10 @@ test('H-4：文档没声明某个锚点 → 不算 skipped（不该虚报）', (
   assert.deepEqual(result.skipped, [])
 })
 
-// ---------------------------------------------------------------- 5. H-5 basis 矛盾（重点）
-
-test('**H-5：basis 未验证 + status authoritative → 报**（M1 新增，最重要的一条）', () => {
-  const result = health([doc('guess', { basis: '未验证', status: 'authoritative' })])
-  assert.deepEqual(idsOf(result, 'H-5'), ['guess'])
-  const issue = result.issues.find((item) => item.rule === 'H-5')
-  assert.ok(issue.message.includes('未验证') && issue.message.includes('authoritative'))
-})
-
-test('H-5：未验证 + draft / partial / superseded → 不报（还没被当成依据）', () => {
-  for (const status of ['draft', 'partial', 'superseded', 'sealed', 'void']) {
-    const meta = status === 'superseded' ? { basis: '未验证', status, supersededBy: ['b'] } : { basis: '未验证', status }
-    const result = health([doc('a', meta), doc('b')])
-    assert.deepEqual(idsOf(result, 'H-5'), [], `status=${status} 被误报`)
-  }
-})
-
-test('H-5：实测 / 推断 + authoritative → 不报', () => {
-  assert.deepEqual(idsOf(health([doc('a', { basis: '实测' }), doc('b', { basis: '推断' })]), 'H-5'), [])
-})
-
-test('H-5：**它是 warn 不是 error** —— 用户明确授权时「未验证的权威」是合理的（M1-L6）', () => {
-  const result = health([doc('a', { basis: '未验证' })])
-  assert.equal(result.ok, true)
-  assert.equal(result.issues[0].level, 'warn')
+test('M4: authoritative with unverified basis does not produce H-5', () => {
+  const result = health([doc('read-order', { role: 'index' }), doc('guess', { basis: '未验证' })])
+  assert.deepEqual(idsOf(result, 'H-5'), [])
+  assert.equal(Object.hasOwn(result.stats.byRule, 'H-5'), false)
 })
 
 // ---------------------------------------------------------------- 6. 输出稳定性
@@ -432,11 +311,6 @@ test('stats：docs / required / errors / warnings 都对', () => {
   ])
   assert.equal(result.stats.docs, 3)
   assert.equal(result.stats.required, 3)
-  // `b` 的 basis=未验证 + authoritative → 1 条 H-5。
-  // `a` / `b` 有没有被 read-order 提到？`doc()` 的 text 默认是 `# read-order`，
-  // 不含 `a` / `b` → 各命中 1 条 H-3。所以 warnings = 1 + 2 = 3。
-  // （实测跑出来是 2 → 说明 `b` 因为 basis 未验证**没进** H-3 的判定路径，
-  //   见下面那条说明；这里按实测值断言，并在注释里写清为什么。）
-  assert.equal(result.stats.warnings, 2, 'H-5 一条 + H-3 一条（`a`）；`b` 未计入，见下')
+  assert.equal(result.stats.warnings, 0, '有效入口不要求列出各文档；basis 不再告警')
   assert.equal(result.stats.errors, 0)
 })

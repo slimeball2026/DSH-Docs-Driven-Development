@@ -26,7 +26,7 @@ import { BUNDLE_VERSION, resolveAnchors } from '../index.js'
 test('D6：没有任何覆盖时，bundle 有值、dsh/commit 为 undefined（**不猜**）', () => {
   const anchors = resolveAnchors()
   assert.equal(anchors.bundle, BUNDLE_VERSION)
-  assert.equal(anchors.bundle, '0.1.0', 'BUNDLE_VERSION 是编译期常量，必须可靠')
+  assert.equal(anchors.bundle, '1.2.0-m4.4', 'BUNDLE_VERSION 必须与候选包一致')
   assert.equal(anchors.dsh, undefined, '宿主没暴露版本 → 不能猜')
   assert.equal(anchors.commit, undefined, '读 git 要起子进程 → 不能猜')
 })

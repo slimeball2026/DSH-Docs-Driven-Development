@@ -37,7 +37,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createNewTool, handoverIndexHintOf, nextHandoverOrder } from '../tools/doc-new.js'
+import { createNewTool, nextHandoverOrder } from '../tools/doc-new.js'
 import { resolveConfig } from '../config.js'
 
 const CONFIG = resolveConfig({})
@@ -84,27 +84,7 @@ test('nextHandoverOrder：已有 -10 时给 **-20**（留插值空间）', () =>
   assert.equal(nextHandoverOrder([{ meta: { role: 'handover', order: -10 } }]), -20)
 })
 
-test('**建交接的提示必须给出 `order` 的两条出路**（否则 AI 只能猜 0）', async () => {
-  const world = fakeWorld([])
-  const tool = createNewTool({
-    config: CONFIG, registry: () => world.registry, fs: world.fs,
-    projectRoot: () => 'C:/proj', cwdOf: () => 'C:/proj',
-  })
-  const value = await tool.execute(
-    { role: 'handover', title: '交接', summary: '甲', id: 'handover-1', body: '# 交接\n' },
-    execOf(),
-  )
-  const rendered = tool.output.render({}, value).map((item) => item.text ?? '').join('\n')
 
-  // ① 必须说清 order 是"建完才知道"的（否则 AI 以为它该算得出来）
-  assert.match(rendered, /建完才知道/, '没说清 order 的可知时机 —— AI 会继续凭感觉猜')
-  // ② 出路一：不写数字
-  assert.match(rendered, /不写数字|只写 `id`/, '没给"不写数字"这条最省事的出路')
-  // ③ 出路二：显式传 order
-  assert.match(rendered, /显式传 `order`/, '没告诉 AI "doc_new 支持显式传 order"（方案 A 的落点）')
-  // ④ 点名那个实测错法
-  assert.match(rendered, /0/, '没点名"别填 0"这个具体错法')
-})
 
 test('**显式传 order 时真的用它**（方案 A 的工具侧能力，此前无测试）', async () => {
   // ⚠️ 这个能力**早就实现了**，但从来没有任何测试钉住它。
@@ -119,35 +99,4 @@ test('**显式传 order 时真的用它**（方案 A 的工具侧能力，此前
     execOf(),
   )
   assert.equal(value.order, -10, '显式传的 order 没被采用 —— 方案 A 的文案会变成空头支票')
-})
-
-test('显式传一个**排不到最前**的 order → 如实警告（不静默改）', async () => {
-  // 已有 order 500 的交接，新建时显式传 600 → 它不是最小的，H7 会判不合格。
-  // 工具**不改**用户给的值（那是明确要求），但必须说出来。
-  const oldText = '---\nid: h-old\ntitle: 旧\nrole: handover\norder: 500\nstatus: authoritative\nsummary: 旧\nbasis: 实测\n---\n\n# 旧\n'
-  const world = fakeWorld([
-    {
-      path: 'C:/proj/docs/h-old.md',
-      text: oldText,
-      body: oldText,
-      meta: { id: 'h-old', role: 'handover', order: 500, status: 'authoritative' },
-      fingerprint: 'F', unmanaged: false, hasError: false,
-    },
-  ])
-  const tool = createNewTool({
-    config: CONFIG, registry: () => world.registry, fs: world.fs,
-    projectRoot: () => 'C:/proj', cwdOf: () => 'C:/proj',
-  })
-  const value = await tool.execute(
-    { role: 'handover', title: '新交接', summary: '乙', id: 'handover-2', order: 600, body: '# 新\n' },
-    execOf(),
-  )
-  assert.equal(value.order, 600, '工具擅自改了显式传的 order')
-  assert.match(value.orderWarning, /不是最小的|H7/, '排错了却不警告，AI 会以为没问题')
-})
-
-test('「清单里已经有」的回执必须带上**实际 order** 供对账', () => {
-  const hint = handoverIndexHintOf('必读清单里已经有 `handover-1`，不覆盖模型写的措辞', -10)
-  assert.match(hint, /`-10`/, '没给实际 order —— AI 无法发现自己写的是 0')
-  assert.match(hint, /一致/, '没要求它去对账')
 })

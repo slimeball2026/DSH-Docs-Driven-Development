@@ -65,12 +65,16 @@ const fs = {
 }
 
 function makeTool(registryOverrides = {}, writeLog = [], readRecord = { fingerprint: 'abcdef', text: 'stub' }) {
+  const registry = makeRegistry(registryOverrides)
+  const files = new Map(registry.entries.map((entry) => [entry.path, entry.text]))
   return createMarkTool({
     config: resolveConfig({}),
-    registry: () => makeRegistry(registryOverrides),
+    registry: () => registry,
     fs: {
       ...fs,
-      writeText: async (target, content) => { writeLog.push({ target, content }) },
+      stat: async (target) => files.has(target.targetKey) ? { type: 'file', version: files.get(target.targetKey) } : undefined,
+      readText: async (target) => files.get(target.targetKey),
+      writeText: async (target, content, expected) => { if (expected?.kind === 'replaceIfVersion') assert.equal(files.get(target.targetKey), expected.version); writeLog.push({ target, content }); files.set(target.targetKey, content); return { version: content } },
     },
     // ⚠️ 这里必须给一个**已读记录**（指纹与注册表一致），否则会先撞
     // 「改状态之前必须先读它」那条门禁 —— 而那与 N2 无关。
@@ -192,7 +196,7 @@ test('N2（接线）：合法参数 + **真变化** → 正常写盘（证明白
   const docWrites = writes.filter((item) => !pathOf(item).includes('ddd-mark-snapshots'))
   const snapshotWrites = writes.filter((item) => pathOf(item).includes('ddd-mark-snapshots'))
   assert.equal(docWrites.length, 1, `文档本身应当写盘一次，实际：${writes.map(pathOf).join(', ')}`)
-  assert.equal(snapshotWrites.length, 1, `标绿时应当额外写一份快照，实际：${writes.map(pathOf).join(', ')}`)
+  assert.equal(snapshotWrites.length, 0, 'M4 不再写标绿快照')
 
   // ⚠️ **返回值里不许出现 schema 之外的字段** —— 2026-11-14 血泪（`session-f36fd404`）。
   //
@@ -213,9 +217,8 @@ test('N2（接线）：合法参数 + **真变化** → 正常写盘（证明白
   //
   // ⇒ 加字段时的正确顺序是：① 返回值 + ② output.schema + ③ **这个数组**，三处都要改。
   const declared = [
-    'id', 'changed', 'added', 'removed', 'marked', 'indexed', 'basisPending',
-    // M3：必读清单半自动渲染（2026-11-20 拍板）—— 加字段时 ①②③ 三处都要改。
-    'requiredListApplied', 'requiredListChanged', 'requiredListWarning',
+    'id', 'changed', 'added', 'removed', 'marked', 'indexed',
+    'published', 'supersededOld', 'warning',
   ]
   const extra = Object.keys(value).filter((key) => !declared.includes(key))
   assert.deepEqual(

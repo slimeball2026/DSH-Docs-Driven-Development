@@ -34,27 +34,7 @@ function codeOf(path) {
 
 // ---------------------------------------------------------------- D2
 
-test('D2：`doc_new` 建交接时必须说清"可以直接 edit，任何状态都行"', () => {
-  const code = codeOf(join(TOOLS, 'doc-new.js'))
-  assert.match(code, /value\.role === 'handover'/, '必须按 role 分支（只有交接才提示）')
-  // ---- 2026-11-14 M2.6：判据**第二次翻面**（策略又变了）----
-  //
-  // 演进：
-  //   旧判据要求「一次性文档」+「不要 edit 旧的」。
-  //   → 第一次改：只放开 draft，判据改成「说清 draft 可以直接改」。
-  //   → 第二次改（用户拍板）：**任何状态都可以 edit**，判据再改。
-  //
-  // ⚠️ 判据要跟着策略翻面 —— 否则测试会一直替旧行为背书（本项目记过这条）。
-  assert.match(code, /交接可以直接 `edit`|交接可以直接 edit/, '必须说清交接可以直接 edit')
-  assert.match(code, /任何状态/, '必须说清"任何状态都行"（不止 draft）')
-  assert.match(code, /`doc_new`/, '新建仍要指向 doc_new（那条链还在）')
-  // 反向：不许再无条件禁止 edit 交接。
-  assert.doesNotMatch(
-    code,
-    /不要 `edit` 旧的/,
-    '还在无条件禁止 edit 旧交接 —— 现在任何状态都能改',
-  )
-})
+
 
 test('D2：`doc_new` 的 output schema 必须声明 role（否则 render 拿不到它）', () => {
   const code = codeOf(join(TOOLS, 'doc-new.js'))
@@ -67,45 +47,11 @@ test('D2：`doc_new` 的 output schema 必须声明 role（否则 render 拿不�
 // 来源：用户让 AI 自己总结难点（`session-916967d2`），它指出两条
 // **校验器查不出来**的问题。两条都只能"事前说"，不能"事后查"。
 
-test('**M2.6：`doc_new` 建交接时必须提醒「别把还没做的事写成已做」**', () => {
-  const code = codeOf(join(TOOLS, 'doc-new.js'))
-  // AI 自述：它建交接时（seq 97）就写了「read-order 已更新」，
-  // 而 read-order 到 seq 124 才改 —— 中间 27 步那份交接在说假话。
-  // 它自己的原话：「七段结构全合规、健康度全过，**但有一句话在说假话**——
-  // 校验器查不出来，只有我自己知道。」
-  assert.match(code, /别把还没做的事写成已做/, '缺少"别描述未来状态"的提醒')
-  assert.match(code, /查不出来|只查结构/, '必须说明这条判据查不出来（否则 AI 会以为能被兜住）')
-  assert.match(code, /先把要引用的东西全做完/, '必须给出正确顺序')
-})
 
-test('**M2.6：`doc_new` 必须提醒「basis 默认是未验证」**（否则标绿后要返工）', () => {
-  const code = codeOf(join(TOOLS, 'doc-new.js'))
-  // AI 自述：「basis 在 doc_new 时是默认值，我在建的时候完全没想它 ——
-  // 因为它不是七段之一，也不影响 H1–H7。结果是定稿 → 复检 → 回头改 basis
-  // → 两份文档指纹变了、又变回未读。」
-  assert.match(code, /`basis` 默认是「未验证」|basis.*默认.*未验证/, '缺少 basis 默认值提醒')
-  assert.match(code, /H-5/, '必须点名 H-5（那条会在标绿后才报）')
-  // ⚠️ 这条提示要**对所有 role** 生效，不能被包在 `role === 'handover'` 分支里。
-  // 判据：取 basis 提示前面那段代码，确认它不在 handover 条件内。
-  const idx = code.indexOf('`basis` 默认是「未验证」')
-  assert.ok(idx > 0, '没找到 basis 提示')
-  const before = code.slice(Math.max(0, idx - 400), idx)
-  const lastHandoverBranch = before.lastIndexOf("value.role === 'handover'")
-  const lastBranchClose = before.lastIndexOf(': \'\')')
-  assert.ok(
-    lastHandoverBranch < lastBranchClose || lastHandoverBranch === -1,
-    'basis 提示被包进了 handover 分支 —— 它对所有 role 都适用',
-  )
-})
 
-test('D2：`doc_handover_check` 拒绝时必须给可执行的修法（直接原地 edit）', () => {
-  const code = codeOf(join(TOOLS, 'doc-handover-check.js'))
-  // ---- 2026-11-14 M2.6：判据第二次翻面 ----
-  // 旧判据要求「如果这份交接还是 draft」；现在任何状态都能改，所以第一句变成"直接 edit"。
-  assert.match(code, /直接 `edit` 这份交接|直接 edit 这份交接/, '必须给出"直接改"这条正路')
-  assert.match(code, /任何状态都可以 edit|任何状态/, '必须说清"任何状态都可以"')
-  assert.match(code, /doc_new/, '新建那条链仍要提到')
-})
+
+
+
 
 // ---------------------------------------------------------------- D3
 
@@ -276,7 +222,8 @@ test('D3：**两个席位都接上了轮询**（主栏 BodyWith + 会话页签�
 test('D4：图例必须说明「接手清单」定位，且说明 ✓ **只增不减**', () => {
   const code = codeOf(join(CLIENT_SRC, 'read-order-bar.tsx'))
   // 用户 2026-11-14 第一次：「阅读顺序应该是个适用于被交接者初次接手项目的显示指标」
-  assert.match(code, /接手清单/, '图例必须给出"接手清单"这个定位')
+  assert.match(code, /参考目录/, 'M4 定位为参考目录，不是全读前置')
+  assert.match(code, /不要求先读完整个目录/, '不得把阅读记录当作全局写权限')
   // 第二次澄清：「按阅读顺序阅读并画勾是一开始被交接时应该做完的，
   // 它大概不应该因为工作就被取消掉」→ 所以要写"只增不减"，**不是**"会失效"。
   assert.match(code, /只增不减/, '必须说明勾不会因为改文档而撤销')
@@ -289,7 +236,7 @@ test('D4：图例必须说明「接手清单」定位，且说明 ✓ **只增�
 test('D4：图例**不许**再说成"绿点 = AI 读过"（2026-11-14 之前的歧义）', () => {
   const code = codeOf(join(CLIENT_SRC, 'read-order-bar.tsx'))
   assert.ok(!code.includes('绿点 = AI 读过'), '旧文案会把置信度说成已读')
-  assert.match(code, /🟢 置信度/, '必须显式说明 🟢 是置信度')
+  assert.match(code, /🟢 状态/, '必须显式说明 🟢 是文档状态')
 })
 
 // ---------------------------------------------------------------- §5 下一步

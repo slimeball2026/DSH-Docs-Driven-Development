@@ -43,7 +43,7 @@ test('枚举与字段表与 SPEC 一致', () => {
   assert.equal(ROLES.length, 8)
   assert.equal(STATUSES.length, 6)
   assert.deepEqual(BASES, ['实测', '推断', '未验证'])
-  assert.deepEqual([...REQUIRED_FIELDS].sort(), ['basis', 'id', 'order', 'role', 'status', 'summary', 'title'])
+  assert.deepEqual([...REQUIRED_FIELDS].sort(), ['id', 'order', 'role', 'status', 'summary', 'title'])
 })
 
 test('最小合法元数据无 error', () => {
@@ -126,13 +126,22 @@ test('V4：partial 但 scope 为空 → error', () => {
 
 // ---------------------------------------------------------------- V5 / V6
 
-test('V5：supersedes 指向不存在的 id → error', () => {
+test('V5：supersedes 历史引用不在当前目录 → warn，不隐藏当前文档', () => {
   const result = validateMeta(
     goodMeta({ supersedes: ['nope'] }),
     { knownIds: ['spec-tier2'], selfId: 'spec-tier2' },
   )
+  assert.equal(result.hasError, false)
+  assert.equal(result.issues.find((item) => item.rule === 'V5')?.level, LEVEL_WARN)
+})
+
+test('V5：supersededBy 指向不存在的替代者 → 仍为 error', () => {
+  const result = validateMeta(
+    goodMeta({ status: 'superseded', supersededBy: ['nope'] }),
+    { knownIds: ['spec-tier2'], selfId: 'spec-tier2' },
+  )
   assert.equal(result.hasError, true)
-  assert.ok(rulesOf(result).includes('V5'))
+  assert.equal(result.issues.find((item) => item.rule === 'V5')?.level, LEVEL_ERROR)
 })
 
 test('V5：带锚点的引用只校验 `#` 之前的 id', () => {
@@ -277,12 +286,11 @@ test('一份文档可以同时报多条问题，hasError 只看 error', () => {
 
 // ---------------------------------------------------------------- V11（M1 新增）
 
-test('**V11：basis 未验证 + status authoritative → warn**（H-5 的数据来源）', () => {
-  const result = validateMeta({ ...goodMeta(), basis: '未验证', status: 'authoritative' })
-  const v11 = result.issues.filter((item) => item.rule === 'V11')
-  assert.equal(v11.length, 1)
-  assert.equal(v11[0].level, 'warn', 'V11 必须是 warn：error 会把文档踢出必读清单，那是过罚')
-  assert.ok(v11[0].message.includes('未验证'))
+test('M4：依据类型不构成发布前置，basis 可省略', () => {
+  const meta = goodMeta({ basis: '未验证' })
+  assert.deepEqual(validateMeta(meta).issues, [])
+  delete meta.basis
+  assert.deepEqual(validateMeta(meta).issues, [])
 })
 
 test('V11：其它 status 组合不报', () => {

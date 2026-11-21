@@ -13,10 +13,8 @@ import { CONFIG_DEFAULTS, resolveConfig } from '../config.js'
 
 test('M1 新增配置项存在，默认值符合 SPEC §9', () => {
   assert.equal(CONFIG_DEFAULTS.coldStartBudgetTokens, 30000)
-  assert.equal(CONFIG_DEFAULTS.handoverCheckStrict, true)
   const config = resolveConfig({})
   assert.equal(config.coldStartBudgetTokens, 30000)
-  assert.equal(config.handoverCheckStrict, true)
 })
 
 test('coldStartBudgetTokens：合法值生效', () => {
@@ -38,13 +36,7 @@ test('coldStartBudgetTokens：非法值静默回落，不抛', () => {
   }
 })
 
-test('handoverCheckStrict：只有显式布尔才算数', () => {
-  assert.equal(resolveConfig({ handoverCheckStrict: false }).handoverCheckStrict, false)
-  assert.equal(resolveConfig({ handoverCheckStrict: true }).handoverCheckStrict, true)
-  for (const bad of ['false', 0, 1, null, {}]) {
-    assert.equal(resolveConfig({ handoverCheckStrict: bad }).handoverCheckStrict, true, `strict=${String(bad)}`)
-  }
-})
+
 
 test('**本包仍然不导出 Config**（导出它会让整行插件加载失败）', async () => {
   const module = await import('../config.js')

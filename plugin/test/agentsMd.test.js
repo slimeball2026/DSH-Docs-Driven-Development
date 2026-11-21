@@ -35,7 +35,7 @@ function good(overrides = {}) {
   return {
     id: 'spec-tier2',
     title: '档 2 施工图',
-    role: 'spec',
+    role: 'index',
     order: 20,
     status: 'authoritative',
     summary: '档 2 的全部功能切片',
@@ -67,11 +67,11 @@ test('块以起始标记开头、以结束标记结尾', () => {
   assert.ok(text.includes(MARKER_END))
 })
 
-test('块里有必读清单，且带 id 与状态', () => {
+test('块里仅当前入口及实时目录方法', () => {
   const text = block()
-  assert.match(text, /### 必读/)
+  assert.match(text, /### 当前入口/)
   assert.match(text, /spec-tier2/)
-  assert.match(text, /🟢/)
+  assert.match(text, /实时目录/)
 })
 
 test('sealed 进【禁止执行】小节（M0-10）', () => {
@@ -102,9 +102,8 @@ test('sealed 文档不在必读清单里', () => {
   assert.doesNotMatch(requiredSection, /trap/)
 })
 
-test('tokens 有值时渲染成 k 单位', () => {
-  const text = block([entry(good({ tokens: 12400 }))])
-  assert.match(text, /12\.4k tokens/)
+test('M4 不再把全目录 token 预算注入 AGENTS', () => {
+  assert.doesNotMatch(block([entry(good({ tokens: 12400 }))]), /12\.4k tokens/)
 })
 
 test('tokens 缺失时不渲染该字段', () => {
@@ -134,7 +133,7 @@ test('术语表（可选）能渲染', () => {
 
 test('**块里不得出现会话态内容**（快变量进 AGENTS.md 就是 R3 违规）', () => {
   const text = block()
-  assert.doesNotMatch(text, /已读/, 'AGENTS.md 不能有"已读"——那是每轮都变的快变量')
+  assert.doesNotMatch(text, /【已读】|已读 \d/, 'AGENTS 不应有读取计数')
   assert.doesNotMatch(text, /\d+\/\d+\s*份/, 'AGENTS.md 不能有已读计数')
   assert.doesNotMatch(text, /\d{4}-\d{2}-\d{2}/, 'AGENTS.md 不能有日期')
   assert.doesNotMatch(text, /当前阶段|当前切片/, 'AGENTS.md 不能有阶段/切片（M0 无此数据源）')
@@ -219,6 +218,13 @@ test('合并：多个标记块只替换第一处之外不会全删（保守行�
   assert.match(merged, /中间用户内容/)
 })
 
+test('合并：摘要中的 $&/$` 是字面内容，不能展开成旧块或用户内容', () => {
+  const existing = '# USER\n<!-- ddd:index v1 -->\nOLD\n<!-- ddd:index end -->\nTAIL'
+  const replacement = block([entry(good({ summary: 'literal $& and $`' }))])
+  const merged = mergeAgentsMd(existing, replacement)
+  assert.equal(merged, '# USER\n' + replacement.trimEnd() + '\nTAIL')
+})
+
 test('sameBlock：忽略行尾空白与空行差异', () => {
   assert.equal(sameBlock('a\nb\n', 'a\n\nb  \n'), true)
   assert.equal(sameBlock('a\nb', 'a\nc'), false)
@@ -226,4 +232,11 @@ test('sameBlock：忽略行尾空白与空行差异', () => {
 
 test('sameBlock：CRLF 与 LF 等价', () => {
   assert.equal(sameBlock('a\r\nb\r\n', 'a\nb\n'), true)
+})
+
+test('M4 不再列出全部有效文档；旧磁盘清单提示清晰', () => {
+ const text = block([entry(good()), entry(good({ id: 'other-spec', role: 'spec' }))])
+ assert.doesNotMatch(text, /other-spec|施工前必须读完/)
+ assert.match(text, /旧磁盘阅读清单可能过时/)
+ assert.match(text, /glob docs\/\*\.md/)
 })

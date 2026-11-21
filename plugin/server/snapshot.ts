@@ -1,48 +1,12 @@
-/**
- * 注册表 → UI 快照（**纯函数**）。
- *
- * ---- 这个文件为什么是纯函数 ----
- *
- * SPEC §5.3-2：它必须是纯函数，才能进 `node --test`、不需要起 HTTP。
- * 于是 UI 的数据来源可以在**没有浏览器、没有 webServer、没有会话**的情况下被单测钉住。
- *
- * ---- 最重要的设计决定：**不复制判据，import 真源** ----
- *
- * 我第一版在这里**抄了一份**「必读 = handover + index」的判据。那是错的：
- *
- * 1. `core/index.js` 的 `buildIndex()` 才是真源 —— 它同时决定了
- *    required / forbidden / anomalies 三份清单，而且带**四条规则**
- *    （有 error 的进 anomalies 不进 required、`sealed` 进 forbidden、
- *    `unmanaged` 进不了任何清单、只有 `authoritative`/`partial` 才可执行）。
- * 2. 抄一份等于**埋一个静默漂移点**：那边一改，看板就和索引块对不上，
- *    而 M2-2 的判据恰恰是「看板的必读进度 = 索引块的 `【门禁】N/M`」。
- *    两边不同源，这条判据迟早会假绿。
- * 3. SPEC §8 开头写得很清楚：**M2 的每一条数据都要能追到它的真源**。
- *
- * 所以这里直接 `buildIndex(entries)`，与 `core/render.js` 用的是**同一个函数**。
- *
- * ---- 三条纪律（都是踩过的坑）----
- *
- * 1. **字段名是 `over`，不是 `overflow`**（SPEC §4.2 订正 1）。
- *    `core/budget.js` 返回的是 `over`。照第一版 SPEC 写会读到一个永远 `undefined`
- *    的字段 —— 症状是**看板永远不报警**，而且不报错。
- *
- * 2. **`sessionId` 是必需参数**（SPEC §4.2 订正 2）。
- *    `gate.read` 来自**会话级** readSet（`adapters/registry.js` 的 `readSetFor(session)`），
- *    预览地址也要它。缺了它，M2-A 和 M2-B 都会坏，而且**坏得很安静**。
- *
- * 3. **拿不到真源就留空，不猜**（交接 §8 的最后一句话）。
- *    `nextStep` / `basisDoc` / `slice` 取不到时给空串或 `null`，
- *    **绝不**编一个"看起来合理"的值。UI 显示空，比显示一个猜的数字好。
- *
- * ---- 它不许做什么 ----
- *
- * - 不许 import 任何 `node:` 内置模块（SPEC §5.3-3，`decoupling.test.js` 会查）；
- * - 不许有副作用（不读盘）；
- * - **不许进 `context()`**。它只喂 HTTP。索引块是另一条通道（M0-5 红线）。
+/** Registry → UI snapshot. No filesystem IO.
+ * buildIndex supplies the complete valid reference directory and safety lists.
+ * entryPointOf supplies the same current entry used by injection and AGENTS.
+ * gate fields remain compatible reading statistics, not a global permission predicate.
+ * generatedAt is UI freshness only and never enters model context.
  */
 
 import { buildIndex } from '../core/index.js'
+import { entryPointOf } from '../core/navigation.js'
 
 /** 快照的 schema 版本。前端可以据此判断自己是不是在跟老 host 说话。 */
 export const SNAPSHOT_VERSION = 1
@@ -154,6 +118,7 @@ export function buildSnapshot(input) {
     .filter((item) => item.id !== '')
 
   const readCount = requiredShaped.filter((item) => item.read === true).length
+  const entryPoint = entryPointOf(entries)
 
   // 全量条目（图谱用）：按 role 分组、组内按 order 升序（SPEC §6.3）。
   // `unmanaged` 不进（它不受管，图谱里显示它只会制造噪音）。
@@ -226,6 +191,8 @@ export function buildSnapshot(input) {
         over: budgetRaw.over === true,
         overBy: typeof budgetRaw.overBy === 'number' ? budgetRaw.overBy : 0,
       },
+    entryPoint: entryPoint ? entryShape(entryPoint, readSet, currentFingerprint) : null,
+    navigationNotice: '实时目录为准；旧磁盘阅读清单可能过时。按任务选择依据，不要求先读完整个目录。',
     required: requiredShaped,
     all,
     forbidden,

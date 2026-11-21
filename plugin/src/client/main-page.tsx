@@ -143,6 +143,16 @@ export function GraphTab({
   ]
 
   return h('div', null,
+    h('div', { style: styles.empty }, snapshot.navigationNotice ?? '实时目录为准；旧磁盘阅读清单可能过时。'),
+    snapshot.entryPoint
+      ? h('button', {
+        type: 'button',
+        style: { ...styles.button, marginBottom: '10px', cursor: previewDisabled || onOpenDoc === undefined ? 'default' : 'pointer' },
+        title: previewDisabled ? '请在会话页的 DDD 面板打开入口文档' : '打开当前交接或项目入口；可继续修订',
+        disabled: previewDisabled || onOpenDoc === undefined,
+        onClick: () => { if (snapshot.entryPoint) onOpenDoc?.(snapshot.entryPoint) },
+      }, `当前接续入口：${snapshot.entryPoint.title || snapshot.entryPoint.id}`)
+      : null,
     // anomalies 置顶（SPEC §6.3：它们是"现在就有问题"，不藏在组里）
     snapshot.anomalies.length > 0
       ? h('div', { style: styles.anomaly },

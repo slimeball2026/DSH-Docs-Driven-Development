@@ -43,11 +43,6 @@ export const CONFIG_DEFAULTS = Object.freeze({
    * 索引块的【预算】行超过这个数就带 ⚠️。**它只影响渲染，不拦任何操作。**
    */
   coldStartBudgetTokens: 30000,
-  /**
-   * 交接校验是否严格（`doc_handover_check` / `doc_mark` 的 H1–H4）。
-   * 设 false 时 H1–H4 降为 warn —— **仅调试用**：那会让「不合格的交接」也能落盘。
-   */
-  handoverCheckStrict: true,
 
   // ---------------------------------------------------------------- M2 新增
 
@@ -128,7 +123,6 @@ export function resolveConfig(config) {
     excludeSubagents: booleanOf(raw.excludeSubagents, d.excludeSubagents),
     markerProbeDepth: naturalOf(raw.markerProbeDepth, d.markerProbeDepth),
     coldStartBudgetTokens: naturalOf(raw.coldStartBudgetTokens, d.coldStartBudgetTokens),
-    handoverCheckStrict: booleanOf(raw.handoverCheckStrict, d.handoverCheckStrict),
 
     // ---- M2 新增
     uiEnabled: booleanOf(raw.uiEnabled, d.uiEnabled),

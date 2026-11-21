@@ -211,19 +211,19 @@ test('D1：文档状态变化后 AGENTS.md 跟着更新（watch 可用）', asyn
   app.cleanup()
 })
 
-test('D1：新增文档后 AGENTS.md 的必读清单跟着更新（watch 可用）', async () => {
+test('D1：新增 sealed 文档后 AGENTS.md 的警示跟着更新（watch 可用）', async () => {
   const app = boot(true)
   await app.step()
   await settle()
   assert.ok(!app.agentsMd().includes('gamma'), '前置条件：gamma 还不存在')
 
-  writeFileSync(join(app.docs, 'gamma.md'), doc('gamma', { order: 30 }))
+  writeFileSync(join(app.docs, 'gamma.md'), doc('gamma', { order: 30, status: 'sealed' }))
   app.fireWatch()
   await settle()
   await app.step()
   await settle()
 
-  assert.ok(app.agentsMd().includes('gamma'), 'AGENTS.md 没收录新文档 —— D1 回归')
+  assert.ok(app.agentsMd().includes('gamma'), 'AGENTS.md 没收录新 sealed 警示 —— D1 回归')
 
   app.cleanup()
 })
@@ -235,7 +235,7 @@ test('D2 对照：watch 可用时新建文档能被发现', async () => {
   await app.step()
   await settle()
 
-  writeFileSync(join(app.docs, 'gamma.md'), doc('gamma', { order: 30 }))
+  writeFileSync(join(app.docs, 'gamma.md'), doc('gamma', { order: 30, status: 'sealed' }))
   app.fireWatch()
   await settle()
   await app.step()
@@ -250,7 +250,7 @@ test('D2：**降级模式**下新建文档能被发现（5 轮 pre-step 内）',
   await app.step()
   await settle()
 
-  writeFileSync(join(app.docs, 'gamma.md'), doc('gamma', { order: 30 }))
+  writeFileSync(join(app.docs, 'gamma.md'), doc('gamma', { order: 30, status: 'sealed' }))
   for (let i = 0; i < 5; i += 1) await app.step()
   await settle()
 
@@ -268,7 +268,7 @@ test('D2：降级模式下模型用 write 新建，也能被发现', async () =>
   await settle()
 
   const gamma = join(app.docs, 'gamma.md')
-  writeFileSync(gamma, doc('gamma', { order: 30 }))
+  writeFileSync(gamma, doc('gamma', { order: 30, status: 'sealed' }))
   app.observe('write', { file_path: gamma }, { isError: false, content: [{ type: 'text', text: 'Created file' }] })
   for (let i = 0; i < 5; i += 1) await app.step()
   await settle()

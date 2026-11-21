@@ -224,7 +224,7 @@ function SessionTabInner({ sessionId = '', wiring }: SessionTabProps): React.Rea
     return h('div', { style: styles.note },
       h('div', { style: styles.noteTitle }, '拿不到这个会话的项目目录'),
       h('div', null,
-        'DDD 需要知道项目根才能读门禁。会话元数据里暂时没有 cwd —— '
+        'DDD 需要知道项目根才能读取目录。会话元数据里暂时没有 cwd —— '
         + '等宿主回填后重开这个页签，或到主栏「文档驱动开发」里手动选一个目录。'),
     )
   }
@@ -305,7 +305,7 @@ function SessionTabInner({ sessionId = '', wiring }: SessionTabProps): React.Rea
     // 现在只补这一行（单行、占位很小），不把整个 Dashboard 塞回来：
     // `nextStep === ''` 时**整行不显示**（取不到就不猜）。
     snapshot.nextStep !== ''
-      ? h('div', { style: styles.nextStep, title: '交接文档 §3「下一刀」的第一条' },
+      ? h('div', { style: styles.nextStep, title: '当前已发布交接中记录的后续动作；没有后续任务时无需填写' },
         h('span', { style: styles.nextStepLabel }, '下一步'),
         h('span', null, snapshot.nextStep))
       : null,

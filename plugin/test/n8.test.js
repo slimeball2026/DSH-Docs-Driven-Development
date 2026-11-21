@@ -18,43 +18,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { fitBudget, projectLineOf, renderIndexBlock } from '../core/render.js'
-import { checkHandover, indexDocsOf, mentionsProjectIntro } from '../core/handover.js'
-
-/** 一份七段齐全的交接正文（H1–H4 都能过）。 */
-function handoverBody(intent) {
-  return `## 1. 我的意图
-
-${intent}
-
-## 2. 现在到哪了
-
-| 项 | 值 |
-|---|---|
-| 单测 | 全绿 |
-
-## 3. 下一刀
-
-- 改 \`core/gate.js\` 的分支
-
-## 4. 坑
-
-| # | 坑 |
-|---|---|
-| 1 | 顺序反了 |
-
-## 5. 验收
-
-- 会话 session-abc seq=12
-
-## 6. 刻意没做
-
-- 没做 UI
-
-## 7. 仍未决
-
-无
-`
-}
+import { indexDocsOf } from '../core/handover.js'
 
 /** 一个最小的索引块渲染输入。 */
 function blockInput(extra = {}) {
@@ -110,9 +74,10 @@ test('N8 主修法：超长 summary 被截断（不让它吃掉整个预算）',
   assert.match(line, /…$/)
 })
 
-test('N8 主修法：索引块里出现【项目】行', () => {
+test('M4: UI project summary is not separately injected into AI context', () => {
   const block = renderIndexBlock(blockInput({ projectLine: '这是项目简介。' }))
-  assert.match(block, /【项目】这是项目简介。/)
+  assert.doesNotMatch(block, /【项目】|这是项目简介。/)
+  assert.match(block, /【目录】/)
 })
 
 test('N8 主修法：**拿不到时整行不显示、不写占位文本**', () => {
@@ -122,7 +87,7 @@ test('N8 主修法：**拿不到时整行不显示、不写占位文本**', () =
   assert.equal(/未知项目|未设置|（无）/.test(block), false, '不许写占位——那会变成永久噪声')
 })
 
-test('N8 主修法：【项目】是 pinned，**极小预算下也不被裁掉**', () => {
+test('fitBudget preserves explicitly pinned sections even at small budgets', () => {
   const sections = [
     { key: 'gate', text: '【门禁】0/30 ｜ 未读完必读清单，改 docs/ 会被拒绝', pinned: true },
     { key: 'budget', text: '【预算】必读 30 份 ≈ 999k tokens（上限 30k）⚠️ 超出上限', pinned: true },
@@ -138,115 +103,7 @@ test('N8 主修法：【项目】是 pinned，**极小预算下也不被裁掉**
   assert.equal(cropped.includes('很长很长的摘要'), false, '裁剪逻辑没跑，这条测试在空跑')
 })
 
-// ---------------------------------------------------------------- H9 判据（**已删除**）
-
-// ---- 2026-11-15 M2.8（用户拍板「砍掉」）----
-//
-// 下面 4 条原本断言 H9 的行为。H9 已从 `checkHandover` 里删除，理由见
-// `core/handover.js` 里那段长注释。核心两条：
-//
-//   ① 它认的是**句式**不是内容：§1 写「在一个刚初始化的 DDD 工作区（…）里走一遍」
-//      信息完全给了，却判 MISS —— 因为"工作区"不在词表里；
-//   ② 它要的信息由系统层【项目】行**每轮免费提供**，H9 自己的文案都承认"只是兜底"。
-//
-// ⇒ 这 4 条改写成"**H9 不许再报**"，防止它被顺手加回来。
-
-test('**M2.8：H9 已删除 —— §1 完全不提项目也**不许**再报 H9**', () => {
-  const verdict = checkHandover({
-    meta: { id: 'h', role: 'handover', order: 10, status: 'draft' },
-    body: handoverBody('把死锁修掉，让 docs/ 不再只读。'),
-    context: { indexDocs: [{ id: 'read-order', title: '阅读顺序' }], handovers: [] },
-  })
-  assert.equal(
-    verdict.warnings.some((item) => item.rule === 'H9'), false,
-    'H9 又回来了 —— 它认句式不认内容，且【项目】行已经免费提供同样的信息',
-  )
-  assert.equal(verdict.errors.some((item) => item.rule === 'H9'), false)
-})
-
-test('M2.8：H9 删除后，§1 写什么都不会因为"项目简介"被报', () => {
-  // 四种写法：原来两种 HIT 两种 MISS。现在**全都不报**。
-  const bodies = [
-    '在一个刚初始化的 DDD 工作区（`DDD全流程测试26`）里走一遍最小回路。',   // 原来 MISS
-    '项目简介：DDD全流程测试26 是一个空壳工作区。',                       // 原来 HIT
-    '本项目是 DDD 全流程测试 26。',                                      // 原来 HIT
-    '这是 DDD 全流程测试 26 工作区。',                                   // 原来 MISS
-  ]
-  for (const text of bodies) {
-    const verdict = checkHandover({
-      meta: { id: 'h', role: 'handover', order: 10, status: 'draft' },
-      body: handoverBody(text),
-      context: { indexDocs: [{ id: 'read-order', title: '阅读顺序' }], handovers: [] },
-    })
-    assert.equal(
-      verdict.warnings.some((item) => item.rule === 'H9'), false,
-      `还在按句式报 H9：${text}`,
-    )
-  }
-})
-
-// ---- `mentionsProjectIntro` 这个**纯函数**保留着（附原单测）----
-//
-// 它本身是对的，只是不该被拿去做判据。将来若要做**真正的语义判断**
-// （而不是句式匹配）可以从它开始。下面这条钉住它仍然可用。
-
-test('M2.8：`mentionsProjectIntro` 纯函数仍然可用（只是不再被 checkHandover 调用）', () => {
-  const indexDocs = [{ id: 'read-order', title: '阅读顺序' }]
-  assert.equal(mentionsProjectIntro('本项目是一个 DDD 插件。', { indexDocs }).ok, true)
-  assert.equal(mentionsProjectIntro('先按 `read-order` 读。', { indexDocs }).ok, true)
-  // 这条就是它误报的证据：内容对了，句式不对，仍判 false
-  assert.equal(
-    mentionsProjectIntro('在一个刚初始化的 DDD 工作区里走一遍。', { indexDocs }).ok,
-    false,
-    '它仍然认句式不认内容 —— 这正是它不该当判据的理由',
-  )
-})
-
-test('H9：**拿不到 indexDocs → 不判**（宁可漏报，不乱报）', () => {
-  // 这条很重要：M1 第一版判据（"前 8 字"）在三个真实项目上全部误报。
-  // 误报的 warn 会被模型学会无视（正是 D9 批评的形态）。
-  const verdict = checkHandover({
-    meta: { id: 'h', role: 'handover', order: 10, status: 'draft' },
-    body: handoverBody('随便写点什么，不提项目。'),
-    context: { handovers: [] },
-  })
-  assert.equal(verdict.warnings.some((item) => item.rule === 'H9'), false)
-})
-
-test('H9：**不改变 ok**（它只是 warn，现存交接一个都不能被打挂）', () => {
-  const withoutContext = checkHandover({
-    meta: { id: 'h', role: 'handover', order: 10, status: 'draft' },
-    body: handoverBody('不提项目。'),
-    context: { handovers: [] },
-  })
-  const withContext = checkHandover({
-    meta: { id: 'h', role: 'handover', order: 10, status: 'draft' },
-    body: handoverBody('不提项目。'),
-    context: { indexDocs: [{ id: 'read-order', title: '阅读顺序' }], handovers: [] },
-  })
-  assert.equal(withContext.ok, withoutContext.ok, 'H9 改变了 ok —— 它是 warn，不该拦')
-  assert.equal(withContext.errors.length, withoutContext.errors.length)
-})
-
-test('H9 用的 mentionsProjectIntro：四种形态逐条钉住', () => {
-  const indexDocs = [{ id: 'read-order', title: '评审探针项目 · 阅读顺序' }]
-  assert.equal(mentionsProjectIntro('本项目是 xxx', { indexDocs }).ok, true, '显式句式')
-  assert.equal(mentionsProjectIntro('见 read-order', { indexDocs }).ok, true, 'id')
-  assert.equal(mentionsProjectIntro('按「评审探针项目 · 阅读顺序」读', { indexDocs }).ok, true, '完整 title')
-  assert.equal(mentionsProjectIntro('随便写点什么', { indexDocs }).ok, false, '什么都不提')
-  // 空 §1
-  assert.equal(mentionsProjectIntro('', { indexDocs }).ok, false)
-  assert.equal(mentionsProjectIntro('   ', { indexDocs }).ok, false)
-})
-
-test('H9 用的 mentionsProjectIntro：**不会被 title 的片段骗过**', () => {
-  // title 是「评审探针项目 · 阅读顺序」，只提「评审探针」（截断）不应命中 id/title 那条，
-  // 但它含「项目」二字 —— 所以这里要确认判据**不是**靠"含项目"蒙混。
-  const indexDocs = [{ id: 'read-order', title: '评审探针项目 · 阅读顺序' }]
-  const verdict = mentionsProjectIntro('这里有三个项目要做', { indexDocs })
-  // 「项目」单独出现不应命中显式句式（句式要求「本项目/这个项目/该项目」）
-  assert.equal(verdict.ok, false, '「三个项目」不该被当成项目简介')
-})
+// M4: H9 diagnostics and phrase-matching helper tests retired.
 
 test('indexDocsOf：优先 index，退 spec，跳过 hasError', () => {
   const docs = indexDocsOf([

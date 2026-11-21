@@ -1,6 +1,6 @@
 {
   "name": "@local/ddd",
-  "version": "1.1.0",
+  "version": "1.2.0-m4.4",
   "private": false,
   "type": "module",
   "description": "Document-Driven Development (DDD) construction constraint engine for DeepSeek-Harness — project-scoped read gate + index injection, mounted globally at profile level.",

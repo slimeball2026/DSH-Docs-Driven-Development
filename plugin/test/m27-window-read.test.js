@@ -179,13 +179,14 @@ const editArgs = (from, to) => ({ old_string: from, new_string: to })
 
 // ---------------------------------------------------------------- 前置
 
-test('前置：文档确实进了必读清单（否则后面所有断言都在测空气）', async () => {
+test('前置：普通 spec 不默认注入，但未读目标确实受门禁保护', async () => {
   const app = boot()
   await app.step()
   await settle()
 
   const idx = app.indexText()
-  assert.ok(idx.includes('【必读】') || idx.includes('alpha'), `索引块里没有 alpha，本测试无效：${idx.slice(0, 400)}`)
+  assert.doesNotMatch(idx, /`alpha`/, 'M4 默认注入不应包含普通 spec')
+  assert.match(idx, /按目标文件/, '已激活项目应说明目标文件门禁')
 
   // 没读过 → 必须拒
   const verdict = app.guard('edit', { file_path: app.file, ...editArgs('标记：原始', '标记：改1') })

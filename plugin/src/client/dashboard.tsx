@@ -144,8 +144,8 @@ export function EmptyView({ projectRoot }: { projectRoot: string }): React.React
 /** 一行文档。点击 → 开预览（M2-B）；**但这不会让 AI 的 readSet 记上**。 */
 function DocRow({ doc, onOpen }: { doc: SnapshotDoc; onOpen?: (doc: SnapshotDoc) => void }): React.ReactElement {
   return h('div', {
-    style: styles.docRow,
-    onClick: () => onOpen?.(doc),
+    style: { ...styles.docRow, cursor: onOpen ? 'pointer' : 'default' },
+    ...(onOpen ? { onClick: () => onOpen(doc) } : {}),
     title: doc.summary === '' ? doc.id : doc.summary,
   },
     h('span', null, statusMark(doc.status)),
@@ -183,7 +183,7 @@ export function Dashboard({
           style: { fontSize: '12px', marginTop: '2px' },
         }, `- ${item.id || '(无 id)'}：${item.message}`)),
         h('div', { style: { ...styles.dim, fontSize: '11px', marginTop: '6px' } },
-          '坏文档不参与必读判定，也不能当依据用。修法：用 edit 只改 frontmatter。'),
+          '坏文档不进入有效目录，也不能当依据用。修法：用 edit 只改 frontmatter。'),
       )
       : null,
 
@@ -201,12 +201,18 @@ export function Dashboard({
         h('div', null, project))
       : null,
 
-    // ④ 必读进度
+    snapshot.entryPoint
+      ? h('div', { style: styles.section },
+        h('div', { style: styles.label }, '当前接续入口'),
+        h(DocRow, { doc: snapshot.entryPoint, onOpen: onOpenDoc }))
+      : null,
+    h('div', { style: styles.note }, snapshot.navigationNotice ?? '实时目录为准；旧磁盘清单可能过时。'),
+    // ④ 阅读记录
     h('div', { style: styles.section },
-      h('div', { style: styles.label }, '必读进度'),
+      h('div', { style: styles.label }, '参考文档阅读记录'),
       h('div', { style: styles.big },
         `${gate.read}/${gate.required}`,
-        gate.required > 0 && gate.read >= gate.required ? ' ✅ 可以动 docs/' : ' ⏳ 还没读完'),
+        gate.required > 0 && gate.read >= gate.required ? ' ✅ 全部有读取记录' : ' · 按任务选择阅读'),
       gate.required > 0 ? h('div', { style: styles.bar }, h('div', { style: styles.barFill(ratio, gate.ready) })) : null,
       unread.length > 0
         ? h('div', { style: { marginTop: '6px' } },
@@ -238,11 +244,11 @@ export function Dashboard({
       ? h('div', { style: styles.section },
         h('div', { style: styles.label }, '预算'),
         h('div', { style: budget.over ? styles.budgetOver : undefined },
-          `必读 ${budget.required} 份 ≈ ${Math.round(budget.tokens / 100) / 10}k tokens（上限 ${Math.round(budget.limit / 1000)}k）`,
+          `有效目录 ${budget.required} 份 ≈ ${Math.round(budget.tokens / 100) / 10}k tokens（上限 ${Math.round(budget.limit / 1000)}k）`,
           budget.over ? ` ⚠️ 超出 ${Math.round(budget.overBy / 100) / 10}k` : ''),
         budget.over
           ? h('div', { style: styles.hint },
-            '超限时索引块的【预算】行会列出「先读哪几份」。这里只报数字，优先级以索引块为准。')
+            '这是完整有效目录的体积估算，不是开工前必须读入的预算。')
           : null)
       : null,
 

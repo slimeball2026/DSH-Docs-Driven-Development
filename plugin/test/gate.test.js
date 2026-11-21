@@ -139,7 +139,7 @@ test('未读就改 docs/ → 拒绝，理由包含缺项 id（M0-2）', () => {
   assert.match(result.reason, /read/)
 })
 
-test('拒绝文案列出**所有**缺的必读 id（SPEC §7.4 第 1 条）', () => {
+test('M4：拒绝只提示目标，不诱导通读其他参考文档', () => {
   const entries = [
     entry(good({ id: 'aaa', order: 10 })),
     entry(good({ id: 'bbb', order: 20 })),
@@ -151,8 +151,9 @@ test('拒绝文案列出**所有**缺的必读 id（SPEC §7.4 第 1 条）', ()
     args: { file_path: 'C:/proj/demo/docs/bbb.md' },
   })
   assert.equal(result.decision, GATE_DENY)
-  assert.match(result.reason, /aaa/)
-  assert.match(result.reason, /ccc/)
+  assert.match(result.reason, /bbb/)
+  assert.doesNotMatch(result.reason, /aaa|ccc/)
+  assert.match(result.reason, /只需补读当前目标/)
 })
 
 test('**指纹变了 → 视为未读**，理由指出 v3 / v5（M0-8）', () => {

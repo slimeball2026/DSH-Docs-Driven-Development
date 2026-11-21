@@ -311,12 +311,23 @@ test('§3.7-5：M1.5 的关键文档都在（防止"只在会话里说过、没�
   // 顺带说明为什么这条测试**有价值**：M2.6 移动文件后它立刻变红，
   // 精确指出「M1-评审报告.md 与 交接-给M1.5施工者.md 不在原处了」——
   // 这正是它该做的事。
+  //
+  // ---- 2026-11-16 M2.9 发布后：又一次按预期变红 ----
+  //
+  // 用户要求把过程文档全部收进 `work-docs/`：
+  //   · SPEC-*            → `work-docs/`
+  //   · M+数字 过程文档    → `work-docs/`
+  //   · 根目录交接文档     → `work-docs/`
+  //   · `_history/` 交接   → `work-docs/_history/`
+  //
+  // 这条测试**第二次**精确报出"这些文档不见了" —— 正是它存在的理由。
+  // 跟着更新路径即可，**不要删**。
   const required = [
     join(BUNDLE, 'README.md'),
     join(WORKSPACE, '_reports', 'M1-评审报告.md'),
-    join(WORKSPACE, '_history', '交接-给M1.5施工者.md'),
-    join(WORKSPACE, 'SPEC-M0-文档驱动开发插件.md'),
-    join(WORKSPACE, 'SPEC-M1-文档驱动开发插件.md'),
+    join(WORKSPACE, 'work-docs', '_history', '交接-给M1.5施工者.md'),
+    join(WORKSPACE, 'work-docs', 'SPEC-M0-文档驱动开发插件.md'),
+    join(WORKSPACE, 'work-docs', 'SPEC-M1-文档驱动开发插件.md'),
   ]
   const missing = required.filter((path) => readOrSkip(path) === undefined)
   assert.deepEqual(missing, [], '这些文档不见了（它们是复核链的一部分）')

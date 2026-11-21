@@ -65,6 +65,8 @@ export interface Snapshot {
   basisDoc: { id: string; section: string; fingerprint: string } | null
   /** ⚠️ 字段名是 `over`，不是 `overflow`（SPEC §4.2 订正 1）。 */
   budget: { required: number; tokens: number; limit: number; over: boolean; overBy: number } | null
+  entryPoint?: SnapshotDoc | null
+  navigationNotice?: string
   required: SnapshotDoc[]
   all: SnapshotDoc[]
   forbidden: Array<{ id: string; summary: string }>
