@@ -17,7 +17,6 @@
  *   7. 指纹变了 = 读的是旧版 → 拒绝，理由指出 v3/v5（§9.3）
  */
 
-import { requiredNotRead } from './index.js'
 import {
   ALLOW,
   APPEND_ONLY,
@@ -414,12 +413,6 @@ function short(fingerprint) {
  * @param {string} id 目标文档 id
  * @returns {string}
  */
-function gateMessage(opts, id) {
-  const missing = requiredNotRead(opts.required, opts.readSet, opts.currentFingerprint)
-  const names = missing
-    .map((entry) => entry?.meta?.id)
-    .filter((value) => typeof value === 'string' && value !== '')
-
-  const list = names.length > 0 ? names.join('、') : id
-  return `改 \`${id}\` 之前必须先读它（用 read 工具）。本会话还缺：${list}`
+function gateMessage(_opts, id) {
+  return `改 \`${id}\` 之前必须先读它（用 read 工具）。只需补读当前目标；其他参考文档按任务选择。`
 }

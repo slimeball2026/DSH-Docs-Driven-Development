@@ -257,7 +257,7 @@ export function createRegistry(deps) {
   }
 
   /**
-   * 索引内容摘要（只取「慢变量关心的部分」：id / status / order / summary）。
+   * 索引内容摘要（只取「慢变量关心的部分」：id / role / status / order / summary）。
    *
    * 为什么不用整份 `index` 对象比较：那会包含 `fingerprint` / `text`，
    * 而文档**正文**一改指纹就变 —— 但正文变化**不该**触发 `AGENTS.md` 重写
@@ -270,7 +270,7 @@ export function createRegistry(deps) {
     const part = (list) => list
       .map((entry) => {
         const meta = entry?.meta ?? {}
-        return `${meta.id ?? entry?.path ?? '?'}\u0001${meta.status ?? ''}\u0001${meta.order ?? ''}\u0001${meta.summary ?? ''}`
+        return `${meta.id ?? entry?.path ?? '?'}\u0001${meta.role ?? ''}\u0001${meta.status ?? ''}\u0001${meta.order ?? ''}\u0001${meta.summary ?? ''}`
       })
       .join('\u0002')
     return `${part(idx?.required ?? [])}\u0003${part(idx?.forbidden ?? [])}\u0003${part(idx?.anomalies ?? [])}`

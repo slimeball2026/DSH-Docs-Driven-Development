@@ -42,7 +42,7 @@ export const STATUSES = Object.freeze([
 export const BASES = Object.freeze(['实测', '推断', '未验证'])
 
 /** 必填字段（V1）。 */
-export const REQUIRED_FIELDS = Object.freeze(['id', 'title', 'role', 'order', 'status', 'summary', 'basis'])
+export const REQUIRED_FIELDS = Object.freeze(['id', 'title', 'role', 'order', 'status', 'summary'])
 
 /** `summary` 的长度上限（SPEC §5.2：≤80 字）。 */
 export const SUMMARY_MAX_CHARS = 80
@@ -192,7 +192,12 @@ export function validateMeta(meta, context = {}) {
         const baseId = target.split('#')[0]
         if (baseId === '' || baseId === context.selfId) continue
         if (!known.has(baseId)) {
-          issues.push(issue('V5', LEVEL_ERROR, `${field} 指向不存在的 id：${target}`))
+          // supersedes is historical: archived predecessors leave the active scan.
+          // Missing a forward replacement still makes the declared successor unusable.
+          const level = field === 'supersedes' ? LEVEL_WARN : LEVEL_ERROR
+          issues.push(issue('V5', level, field === 'supersedes'
+            ? `supersedes 引用的历史 id 不在当前目录（可能已归档）：${target}`
+            : `${field} 指向不存在的 id：${target}`))
         }
       }
     }
@@ -260,17 +265,6 @@ export function validateMeta(meta, context = {}) {
         issues.push(issue('V12', LEVEL_WARN, `verifiedAt 不是一个真实日期：${verifiedAt}`))
       }
     }
-  }
-
-  // ---- V11 basis 与 status 自相矛盾（M1 新增，H-5 的数据来源）
-  //
-  // 「没验证过的结论不该被当成权威」。M0 的 `basis` 字段**只被解析、从未被使用** ——
-  // 一个填了却没人看的字段，等于没填。这条把它接上。
-  //
-  // 级别是 **warn 不是 error**：用户明确授权时「未验证的权威」可能是合理的（M1-L6），
-  // 而 error 会把它踢出必读清单，那是**过罚**。
-  if (basis === '未验证' && status === 'authoritative') {
-    issues.push(issue('V11', LEVEL_WARN, 'basis 是「未验证」却标成 authoritative：没验证过的结论会被当成依据。要么去验证，要么降成 draft'))
   }
 
   // ---- V9 锚点漂移：只 warn，**绝不自动改 status**（Q5 = D）

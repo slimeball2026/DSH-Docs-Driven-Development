@@ -19,8 +19,7 @@
  *     不关插值 = 某份文档让整个会话每一轮都硬失败。
  */
 
-import { projectLineOf, renderIndexBlock, sliceLineOf } from '../core/render.js'
-import { budgetHintIdsOf, computeBudget, renderBudgetLine } from '../core/budget.js'
+import { renderIndexBlock } from '../core/render.js'
 import { isSubagentSession, shouldActivate } from '../core/scope.js'
 
 /** 上下文注册名。 */
@@ -77,36 +76,13 @@ export function registerIndexBlock(ctx, deps) {
       if (reg === undefined || reg === null) return ''
 
       try {
-        // **同步**读内存，不读盘。
-        //
-        // 【预算】行（M1-E）在这里算：它只依赖「必读集合 + 各文档 tokens」，
-        // 不依赖已读集合、不含时间/轮次 —— 所以它**只在必读清单或某份文档长度变了时才变**，
-        // 不会让索引块每轮都 append（M0-5 的红线）。
         const index = reg.index
-        const budget = computeBudget(index?.required ?? [], {
-          limit: config.coldStartBudgetTokens,
-        })
-        // M2-G / D-9：超限时给出**具体的**「先读哪几份」。
-        // `budgetHintIdsOf` 只在超限时才被用来拼后缀；不超限时
-        // `renderBudgetLine` 直接原样返回，**一个字符都不变**（判据 3）。
-        const budgetLine = renderBudgetLine(budget, {
-          hintIds: budget.over === true
-            ? budgetHintIdsOf(index?.required ?? [], config.uiBudgetHintCount)
-            : [],
-          hintCount: config.uiBudgetHintCount,
-        })
-
         return renderIndexBlock({
           index,
           readSet: typeof reg.readSetFor === 'function' ? reg.readSetFor(session) : reg.readSet,
           currentFingerprint: (id) => reg.fingerprintOf(id),
           maxChars: config.maxIndexBlockChars,
           activated: true,
-          budgetLine,
-          // M1.5 / N8：这个项目是什么。取不到时是空串，renderIndexBlock 会**整行不显示**。
-          projectLine: projectLineOf(reg),
-          // M1.5 / D5（选项 B）：当前切片名。同样**拿不到就整行不显示**。
-          sliceLine: sliceLineOf(reg),
           // M1.5 / N4：【文档异常】要显示**相对项目根**的路径，不能用绝对路径。
           projectRoot: info.projectRoot,
         })
