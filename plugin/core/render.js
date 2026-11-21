@@ -401,12 +401,18 @@ export function renderIndexBlock(state) {
   // ⇒ 压到只留**动作名 → 落点**，参数细节交给工具自己的 `description`。
   //   目标：整行 ≤ 60 字符，让 pinned 三行总长仍能装进 200。
   //
+  // ---- 2026-11-20 M3：把"改入口索引正文"改成"索引成员自动" ----
+  //
+  // M3 起 `## 必读清单` 的成员由插件按 frontmatter 自动渲染（`core/requiredList.js`）。
+  // 旧文案叫模型"改入口索引正文"——它会让模型去**手改自动块**，正好撞上新加的开销。
+  // 现在说清：成员自动；要手写的是**其它小节**（为什么读 / 下一步 / 陷阱 / 依据）。
+  //
   // ⚠️ 不能写进 `AGENTS.md`：那是慢变量文件，一变更就多一条历史消息（M0-5 红线）。
   // ⚠️ 必须是静态文案：不含时间戳/轮次/百分比。
   sections.push({
     key: 'howto',
-    text: `${TAG.howto}归档→doc_mark 标 void；交付→放 deliverables/；`
-      + '阅读顺序→改各文档 order 且改入口索引正文。别读插件源码。',
+    text: `${TAG.howto}归档→doc_mark 标 void；交付→deliverables/；`
+      + '阅读顺序→改 order，索引成员自动，其它小节手写。别读插件源码。',
     pinned: true,
   })
 
